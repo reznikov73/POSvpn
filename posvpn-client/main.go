@@ -1,6 +1,8 @@
 // posvpn-client — клиент POSvpn. На этом этапе это CLI-каркас: создание сети,
 // вход в неё и просмотр карты. Виртуальный адаптер и туннель — следующий этап
 // (см. docs/05-план.md).
+//go:build windows
+
 package main
 
 import (
@@ -38,8 +40,8 @@ type config struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
+		runWizard()
+		return
 	}
 
 	var err error
@@ -70,6 +72,7 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `POSvpn — виртуальная локальная сеть
 
+  posvpn-client                 мастер: меню на русском
   posvpn-client create -network <имя> -password <пароль> [-node <имя ПК>] [-server <url>]
   posvpn-client join   -network <имя> -password <пароль> [-node <имя ПК>] [-server <url>]
   posvpn-client status
