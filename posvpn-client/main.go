@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"posvpn-engine"
+	"posvpn-engine/console"
 )
 
 const defaultServer = "http://127.0.0.1:8787"
@@ -39,6 +40,7 @@ type config struct {
 }
 
 func main() {
+	console.UTF8()
 	if len(os.Args) < 2 {
 		runWizard()
 		return

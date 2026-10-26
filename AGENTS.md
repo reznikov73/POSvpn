@@ -69,6 +69,8 @@ Get-ChildItem out, installer\out
    [docs/04-стек.md](docs/04-стек.md).
 4. Требования и их статус — в [docs/06-ТЗ.md](docs/06-ТЗ.md); этапы — в
    [docs/05-план.md](docs/05-план.md).
+5. Скрипты `.ps1` сохраняются в UTF-8 **с BOM**: Windows PowerShell 5.1 читает
+   файлы без BOM как ANSI и падает на кириллице с ошибкой парсера.
 
 ## 4. Начало сессии
 

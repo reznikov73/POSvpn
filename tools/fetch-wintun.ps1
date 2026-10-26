@@ -1,4 +1,4 @@
-# Загружает подписанную wintun.dll официальной сборки Wintun.
+﻿# Загружает подписанную wintun.dll официальной сборки Wintun.
 # Кладёт файл в third_party\wintun\amd64\wintun.dll; build.ps1 копирует его в out\.
 #
 #   .\tools\fetch-wintun.ps1                  # скачать с wintun.net

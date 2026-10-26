@@ -1,4 +1,4 @@
-# Сборка обоих бинарников POSvpn.
+﻿# Сборка обоих бинарников POSvpn.
 # Запуск: .\build.ps1   или из VS Code: задача «build: all».
 
 $ErrorActionPreference = 'Stop'
