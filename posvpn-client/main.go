@@ -26,6 +26,8 @@ const defaultServer = "http://127.0.0.1:8787"
 // на сервер: туда отправляется только публичная половина.
 type config struct {
 	Server     string `json:"server"`
+	Hub        string `json:"hub,omitempty"`
+	HubPin     string `json:"hub_pin,omitempty"`
 	NodeID     string `json:"node_id"`
 	Token      string `json:"token"`
 	Network    string `json:"network"`
@@ -48,6 +50,10 @@ func main() {
 		err = runAuth(os.Args[2:], false)
 	case "status", "peers":
 		err = runStatus(os.Args[2:])
+	case "up":
+		err = runUp(os.Args[2:])
+	case "down":
+		err = runDown(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 		return
@@ -67,6 +73,8 @@ func usage() {
   posvpn-client create -network <имя> -password <пароль> [-node <имя ПК>] [-server <url>]
   posvpn-client join   -network <имя> -password <пароль> [-node <имя ПК>] [-server <url>]
   posvpn-client status
+  posvpn-client up    [-hub <адрес>] [-pin <отпечаток>] [-mtu <n>] [-adapter <имя>]
+  posvpn-client down  [-adapter <имя>]
 `)
 }
 
@@ -171,8 +179,8 @@ func runStatus(args []string) error {
 
 func printNetMap(netmap engine.NetMap) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ИМЯ\tАДРЕС\tРОЛЬ\tСОСТОЯНИЕ\tКАНАЛ")
-	fmt.Fprintf(w, "%s (вы)\t%s\t%s\tонлайн\t—\n", netmap.Self.Name, netmap.Self.IP, netmap.Self.Role)
+	fmt.Fprintln(w, "ИМЯ\tАДРЕС\tИНДЕКС\tРОЛЬ\tСОСТОЯНИЕ\tКАНАЛ")
+	fmt.Fprintf(w, "%s (вы)\t%s\t%d\t%s\tонлайн\t—\n", netmap.Self.Name, netmap.Self.IP, netmap.Self.Index, netmap.Self.Role)
 	for _, peer := range netmap.Peers {
 		state := "офлайн"
 		if peer.Online {
@@ -182,7 +190,7 @@ func printNetMap(netmap engine.NetMap) {
 		if peer.Endpoint != "" {
 			channel = peer.Endpoint
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", peer.Name, peer.IP, peer.Role, state, channel)
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\n", peer.Name, peer.IP, peer.Index, peer.Role, state, channel)
 	}
 	w.Flush()
 }

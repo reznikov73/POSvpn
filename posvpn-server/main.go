@@ -16,6 +16,7 @@ import (
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:8787", "адрес и порт control-сервера")
+	hubAddr := flag.String("hub", "0.0.0.0:8788", "адрес QUIC-хаба; пусто — не запускать")
 	storePath := flag.String("store", "server.json", "файл состояния координатора")
 	certFile := flag.String("tls-cert", "", "сертификат TLS; пусто — работа без TLS (только для локальной отладки)")
 	keyFile := flag.String("tls-key", "", "ключ TLS")
@@ -36,6 +37,14 @@ func main() {
 	}
 
 	useTLS := *certFile != "" && *keyFile != ""
+
+	if *hubAddr != "" {
+		hub, err := StartHub(store, *hubAddr)
+		if err != nil {
+			log.Fatalf("хаб не запущен: %v", err)
+		}
+		defer hub.Close()
+	}
 
 	go func() {
 		var err error

@@ -7,6 +7,14 @@ Set-Location $root
 
 New-Item -ItemType Directory -Force -Path out | Out-Null
 
+# Драйвер туннеля: wintun.dll должен лежать рядом с exe, из памяти DLL не
+# грузится. Если файла нет, сборка продолжается, но туннель не запустится.
+# Загрузка: .\tools\fetch-wintun.ps1  (или -From <путь к готовому wintun.dll>).
+$wintun = Join-Path $root 'third_party\wintun\amd64\wintun.dll'
+if (-not (Test-Path $wintun)) {
+    Write-Host 'wintun.dll не найден: .\tools\fetch-wintun.ps1 (или -From <путь>)' -ForegroundColor Yellow
+}
+
 $targets = @(
     @{ Name = 'posvpn-server'; Path = './posvpn-server' },
     @{ Name = 'posvpn-client'; Path = './posvpn-client' }
@@ -32,3 +40,10 @@ if ($failed.Count -gt 0) {
 }
 
 Write-Host "Всё собрано: $root\out" -ForegroundColor Green
+
+if (Test-Path $wintun) {
+    Copy-Item $wintun 'out\wintun.dll' -Force
+    Write-Host 'wintun.dll скопирован в out' -ForegroundColor Green
+} else {
+    Write-Host 'ВНИМАНИЕ: wintun.dll отсутствует — туннель не запустится' -ForegroundColor Yellow
+}

@@ -27,15 +27,21 @@ type Network struct {
 	PasswordHash string    `json:"password_hash"`
 	Closed       bool      `json:"closed"`
 	CreatedAt    time.Time `json:"created_at"`
+	// NextIndex — следующий числовой индекс узла. Индексы не переиспользуются,
+	// пока существует сеть: по ним хаб адресует кадры.
+	NextIndex uint32 `json:"next_index"`
 }
 
 // Node — узел (компьютер), состоящий в сети. Хранится только на сервере.
 type Node struct {
-	ID        string    `json:"id"`
-	NetworkID string    `json:"network_id"`
-	Name      string    `json:"name"`
-	PublicKey string    `json:"public_key"`
-	IP        string    `json:"ip"`
+	ID        string `json:"id"`
+	NetworkID string `json:"network_id"`
+	Name      string `json:"name"`
+	PublicKey string `json:"public_key"`
+	IP        string `json:"ip"`
+	// Index — числовой адрес узла внутри сети для заголовка кадра.
+	// 0 зарезервирован под бродкаст, поэтому у реальных узлов индекс ≥ 1.
+	Index     uint32    `json:"index"`
 	Role      string    `json:"role"`
 	TokenHash string    `json:"token_hash"`
 	Endpoint  string    `json:"endpoint,omitempty"`
@@ -48,6 +54,7 @@ type Peer struct {
 	NodeID    string `json:"node_id"`
 	Name      string `json:"name"`
 	IP        string `json:"ip"`
+	Index     uint32 `json:"index"`
 	PublicKey string `json:"public_key"`
 	Role      string `json:"role"`
 	Endpoint  string `json:"endpoint,omitempty"`

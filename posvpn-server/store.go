@@ -45,6 +45,7 @@ func OpenStore(path string) (*Store, error) {
 	if s.st.NextSubnet < 1 {
 		s.st.NextSubnet = 1
 	}
+	s.migrateIndexesLocked()
 	return s, nil
 }
 
@@ -78,6 +79,41 @@ func (s *Store) saveLocked() error {
 		return fmt.Errorf("замена состояния: %w", err)
 	}
 	return nil
+}
+
+// migrateIndexesLocked чинит состояние, созданное до появления числовых
+// индексов: узлам без индекса выдаёт следующий свободный, а счётчик сети
+// поднимает выше всех занятых.
+func (s *Store) migrateIndexesLocked() {
+	max := make(map[string]uint32)
+	for _, n := range s.st.Nodes {
+		if n.Index > max[n.NetworkID] {
+			max[n.NetworkID] = n.Index
+		}
+	}
+	byID := make(map[string]*engine.Network, len(s.st.Networks))
+	for i := range s.st.Networks {
+		net := &s.st.Networks[i]
+		byID[net.ID] = net
+		if net.NextIndex <= max[net.ID] {
+			net.NextIndex = max[net.ID] + 1
+		}
+		if net.NextIndex == 0 {
+			net.NextIndex = 1
+		}
+	}
+	for i := range s.st.Nodes {
+		node := &s.st.Nodes[i]
+		if node.Index != 0 {
+			continue
+		}
+		net, ok := byID[node.NetworkID]
+		if !ok {
+			continue
+		}
+		node.Index = net.NextIndex
+		net.NextIndex++
+	}
 }
 
 func (s *Store) bumpVersionLocked() {
@@ -118,6 +154,8 @@ func (s *Store) CreateNetwork(networkID, name, passwordHash string, node engine.
 	}
 	node.NetworkID = net.ID
 	node.IP = ip
+	node.Index = 1
+	net.NextIndex = 2
 
 	s.st.Networks = append(s.st.Networks, net)
 	s.st.Nodes = append(s.st.Nodes, node)
@@ -176,16 +214,14 @@ func (s *Store) AddNode(node engine.Node) (engine.Node, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var net engine.Network
-	found := false
-	for _, candidate := range s.st.Networks {
-		if candidate.ID == node.NetworkID {
-			net = candidate
-			found = true
+	var net *engine.Network
+	for i := range s.st.Networks {
+		if s.st.Networks[i].ID == node.NetworkID {
+			net = &s.st.Networks[i]
 			break
 		}
 	}
-	if !found {
+	if net == nil {
 		return engine.Node{}, ErrNetworkNotFound
 	}
 
@@ -210,6 +246,11 @@ func (s *Store) AddNode(node engine.Node) (engine.Node, error) {
 		return engine.Node{}, err
 	}
 	node.IP = ip
+	node.Index = net.NextIndex
+	if node.Index == 0 {
+		node.Index = 1
+	}
+	net.NextIndex = node.Index + 1
 
 	s.st.Nodes = append(s.st.Nodes, node)
 	s.bumpVersionLocked()
@@ -296,6 +337,7 @@ func (s *Store) NetMapFor(node engine.Node) (engine.NetMap, error) {
 			NodeID:    node.ID,
 			Name:      node.Name,
 			IP:        node.IP,
+			Index:     node.Index,
 			PublicKey: node.PublicKey,
 			Role:      node.Role,
 			Endpoint:  node.Endpoint,
@@ -311,6 +353,7 @@ func (s *Store) NetMapFor(node engine.Node) (engine.NetMap, error) {
 			NodeID:    peer.ID,
 			Name:      peer.Name,
 			IP:        peer.IP,
+			Index:     peer.Index,
 			PublicKey: peer.PublicKey,
 			Role:      peer.Role,
 			Endpoint:  peer.Endpoint,
