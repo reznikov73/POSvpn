@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
@@ -103,6 +104,13 @@ func (d *wintunDevice) configure(ip string, mtu int) error {
 		return fmt.Errorf("назначение адреса %s: %w", ip, err)
 	}
 
+	// Сразу после создания адаптера Windows ещё не готова принимать записи
+	// маршрутов: CreateIpForwardEntry2 отвечает ERROR_NOT_FOUND. Ждём, пока
+	// адрес станет Preferred.
+	if err := waitForAddress(d.luid, addr); err != nil {
+		return err
+	}
+
 	if iface, err := d.luid.IPInterface(winipcfg.AddressFamily(windows.AF_INET)); err == nil {
 		iface.NLMTU = uint32(mtu)
 		if err := iface.Set(); err != nil {
@@ -115,10 +123,46 @@ func (d *wintunDevice) configure(ip string, mtu int) error {
 		NextHop:     netip.IPv4Unspecified(),
 		Metric:      0,
 	}
-	if err := d.luid.SetRoutes([]*winipcfg.RouteData{route}); err != nil {
-		return fmt.Errorf("маршрут 10.77.0.0/16: %w", err)
+	return addRouteWithRetry(d.luid, route)
+}
+
+// waitForAddress ждёт, пока Windows доведёт адрес до состояния Preferred.
+func waitForAddress(luid winipcfg.LUID, addr netip.Addr) error {
+	deadline := time.Now().Add(3 * time.Second)
+	var last error
+	for {
+		row, err := luid.IPAddress(addr)
+		if err == nil && row != nil && row.DadState == winipcfg.DadStatePreferred {
+			return nil
+		}
+		last = err
+		if time.Now().After(deadline) {
+			if last == nil {
+				last = errors.New("адрес не перешёл в состояние Preferred")
+			}
+			return fmt.Errorf("адрес %s не активировался: %w", addr, last)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	return nil
+}
+
+// addRouteWithRetry добавляет маршрут, повторяя попытку, пока интерфейс
+// не будет готов. Чужие маршруты не трогаем: автоматический on-link маршрут
+// подсети нужен Windows для локальной доставки.
+func addRouteWithRetry(luid winipcfg.LUID, route *winipcfg.RouteData) error {
+	deadline := time.Now().Add(3 * time.Second)
+	var last error
+	for {
+		err := luid.AddRoute(route.Destination, route.NextHop, route.Metric)
+		if err == nil || errors.Is(err, windows.ERROR_OBJECT_ALREADY_EXISTS) {
+			return nil
+		}
+		last = err
+		if time.Now().After(deadline) {
+			return fmt.Errorf("маршрут %s: %w", route.Destination, last)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
 }
 
 func (d *wintunDevice) readLoop() {
