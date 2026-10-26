@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Сервер координации",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/posvpn-server",
+      "args": ["-listen", "127.0.0.1:8787", "-store", "${workspaceFolder}/out/server.json"]
+    },
+    {
+      "name": "Клиент: статус",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/posvpn-client",
+      "args": ["status"]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+# Сборка
+*.exe
+*.dll
+out/
+build/bin/
+
+# Локальное состояние и логи (не коммитим секреты и рабочие данные)
+*.log
+client.json
+server.json
+*.state.json
+
+# Редакторы
+.idea/
+*.swp

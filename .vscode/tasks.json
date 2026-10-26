@@ -1,0 +1,39 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "test: engine",
+      "type": "shell",
+      "command": "go test ./...",
+      "options": { "cwd": "${workspaceFolder}/engine" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "test: server",
+      "type": "shell",
+      "command": "go test ./...",
+      "options": { "cwd": "${workspaceFolder}/posvpn-server" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "build: all",
+      "type": "shell",
+      "command": "pwsh -NoProfile -File ./build.ps1",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "run: server",
+      "type": "shell",
+      "command": "go run ./posvpn-server -listen 127.0.0.1:8787 -store out/server.json",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": ["$go"]
+    }
+  ]
+}
