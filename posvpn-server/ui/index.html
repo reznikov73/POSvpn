@@ -167,6 +167,54 @@
   button.btn:hover { background: #2d3a4c; }
   button.btn.warn { border-color: rgba(227,93,93,.5); color: #ffb3b3; }
   #error { color: #ff9d9d; display: none; margin-top: 8px; font-size: 12px; }
+
+  .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(6,9,13,.66);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal.show { display: flex; }
+  .sheet {
+    width: 100%;
+    max-width: 360px;
+    background: #1d2531;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+    padding: 16px;
+  }
+  .sheet h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+  .field { margin-bottom: 10px; }
+  .field label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: #151b24;
+    color: var(--text);
+    font: 13px Consolas, monospace;
+    outline: none;
+    user-select: text;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .hint { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--muted); }
+  .form-error { display: none; margin-top: 8px; color: #ff9d9d; font-size: 12px; }
+  .row { display: flex; gap: 8px; margin-top: 14px; }
+  .row .btn { flex: 1; padding: 9px 12px; font-size: 13px; }
+  .row .btn.primary { background: linear-gradient(180deg, #38a9d6, #2a83ab); border-color: #3fb4e4; color: #f2fbff; }
 </style>
 </head>
 <body>
@@ -210,10 +258,10 @@
     </section>
 
     <section class="stats">
-      <div class="stat"><div class="num" id="received">0</div><div class="cap">принято</div></div>
-      <div class="stat"><div class="num" id="forwarded">0</div><div class="cap">переслано</div></div>
-      <div class="stat"><div class="num" id="broadcast">0</div><div class="cap">бродкаст</div></div>
-      <div class="stat"><div class="num" id="dropped">0</div><div class="cap">отброшено</div></div>
+      <div class="stat" title="Кадры, пришедшие от клиентов"><div class="num" id="received">0</div><div class="cap">принято</div></div>
+      <div class="stat" title="Кадры, доставленные адресату"><div class="num" id="forwarded">0</div><div class="cap">переслано</div></div>
+      <div class="stat" title="Кадры dst=0, разосланные всей сети"><div class="num" id="broadcast">0</div><div class="cap">бродкаст</div></div>
+      <div class="stat" title="Не удалось доставить: неизвестный индекс, кадр больше лимита, битый заголовок"><div class="num" id="dropped">0</div><div class="cap">отброшено</div></div>
     </section>
 
     <div id="networks"></div>
@@ -225,9 +273,30 @@
       <div id="storePath" title="">состояние: —</div>
       <div id="logPath" title="">журнал: —</div>
     </div>
+    <button class="btn" id="settingsBtn" type="button">Настройки</button>
     <button class="btn" id="openLogs" type="button">Журнал</button>
     <button class="btn warn" id="quit" type="button">Выход</button>
   </footer>
+</div>
+
+<div class="modal" id="settingsModal">
+  <div class="sheet">
+    <h2>Настройки сервера</h2>
+    <div class="field">
+      <label for="sListen">Контроль: адрес и порт</label>
+      <input id="sListen" placeholder="0.0.0.0:8787" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="sHub">Хаб: адрес и порт</label>
+      <input id="sHub" placeholder="0.0.0.0:8788" autocomplete="off">
+    </div>
+    <p class="hint">Изменения применяются сразу: сервер остановится и поднимется с новыми адресами. Пустой адрес хаба отключает хаб.</p>
+    <div class="form-error" id="settingsError"></div>
+    <div class="row">
+      <button class="btn" id="settingsCancel" type="button">Отмена</button>
+      <button class="btn primary" id="settingsSave" type="button">Сохранить</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -253,9 +322,9 @@
     }
   }
 
-  async function act(name) {
+  async function act(name, payload) {
     try {
-      var res = JSON.parse(await window.serverAction(name));
+      var res = JSON.parse(await window.serverAction(name, JSON.stringify(payload || {})));
       ACT_ERROR = !res.ok;
       if (!res.ok) {
         var err = $('error');
@@ -336,6 +405,39 @@
   }
 
   $('openLogs').addEventListener('click', function () { act('open_logs'); });
+
+  $('settingsBtn').addEventListener('click', function () {
+    $('sListen').value = (STATE && STATE.listen) || '0.0.0.0:8787';
+    $('sHub').value = (STATE && STATE.hub) || '0.0.0.0:8788';
+    $('settingsError').style.display = 'none';
+    $('settingsModal').classList.add('show');
+  });
+
+  $('settingsCancel').addEventListener('click', function () {
+    $('settingsModal').classList.remove('show');
+  });
+
+  $('settingsSave').addEventListener('click', async function () {
+    var listen = $('sListen').value.trim();
+    var hub = $('sHub').value.trim();
+    var err = $('settingsError');
+    if (!listen) {
+      err.textContent = 'Адрес контроля не может быть пустым';
+      err.style.display = 'block';
+      return;
+    }
+    var res = await act('settings', { listen: listen, hub: hub });
+    if (res.ok) {
+      $('settingsModal').classList.remove('show');
+    } else {
+      err.textContent = res.error || 'Не удалось применить настройки';
+      err.style.display = 'block';
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') $('settingsModal').classList.remove('show');
+  });
   $('power').addEventListener('click', function () {
     if (!STATE) return;
     if (STATE.running) {

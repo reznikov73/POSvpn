@@ -27,6 +27,11 @@ type serverGUI struct {
 	w   webview2.WebView
 }
 
+type settingsRequest struct {
+	Listen string `json:"listen"`
+	Hub    string `json:"hub"`
+}
+
 type srvState struct {
 	Running     bool          `json:"running"`
 	Listen      string        `json:"listen"`
@@ -78,6 +83,13 @@ func runServerGUI(app *serverApp) error {
 	}
 
 	w.SetHtml(serverHTML)
+
+	// Отладочный запуск диалога настроек: POSVPN_SERVER_DIALOG=settings.
+	if os.Getenv("POSVPN_SERVER_DIALOG") != "" {
+		w.Init("window.addEventListener('load', function(){ setTimeout(function(){ try { document.getElementById('settingsBtn').click(); } catch (e) {} }, 350); });")
+		w.SetHtml(serverHTML)
+	}
+
 	serverDarkTitleBar(w)
 	w.Run()
 
@@ -89,13 +101,13 @@ func runServerGUI(app *serverApp) error {
 func (g *serverGUI) State() (string, error) {
 	state := srvState{
 		Running:     g.app.Running(),
-		Listen:      g.app.listen,
-		Hub:         g.app.hubAddr,
+		Listen:      g.app.ListenAddr(),
+		Hub:         g.app.HubAddr(),
 		Fingerprint: g.app.fingerprint,
 		Store:       g.app.storePath,
 		Log:         g.app.logPath,
 		Error:       g.app.StartupError(),
-		LocalOnly:   localOnlyListen(g.app.listen),
+		LocalOnly:   localOnlyListen(g.app.ListenAddr()),
 		Networks:    g.app.store.Snapshot(time.Now()),
 	}
 	if state.Running {
@@ -118,14 +130,28 @@ func (g *serverGUI) State() (string, error) {
 	return string(raw), nil
 }
 
-// Action выполняет команды окна.
-func (g *serverGUI) Action(name string) (string, error) {
+// Action выполняет команды окна. Полезная нагрузка — JSON-строка.
+func (g *serverGUI) Action(name, payload string) (string, error) {
 	var err error
 	switch name {
 	case "start":
 		err = g.app.Start()
 	case "stop":
 		g.app.Stop()
+	case "settings":
+		var req settingsRequest
+		if parseErr := json.Unmarshal([]byte(payload), &req); parseErr != nil {
+			err = fmt.Errorf("настройки: %w", parseErr)
+			break
+		}
+		if applyErr := g.app.UpdateEndpoints(req.Listen, req.Hub); applyErr != nil {
+			err = applyErr
+			break
+		}
+		err = saveUISettings(g.app.settingsFile, uiSettings{
+			Listen: g.app.ListenAddr(),
+			Hub:    g.app.HubAddr(),
+		})
 	case "quit":
 		g.app.Stop()
 		if g.w != nil {

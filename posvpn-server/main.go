@@ -31,12 +31,13 @@ type serverApp struct {
 	cert        tls.Certificate
 	fingerprint string
 
-	listen    string
-	hubAddr   string
-	storePath string
-	logPath   string
-	certFile  string
-	keyFile   string
+	listen       string
+	hubAddr      string
+	storePath    string
+	logPath      string
+	certFile     string
+	keyFile      string
+	settingsFile string
 
 	mu           sync.Mutex
 	running      bool
@@ -149,6 +150,57 @@ func (a *serverApp) StartedAt() time.Time {
 	return a.startedAt
 }
 
+func (a *serverApp) ListenAddr() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.listen
+}
+
+func (a *serverApp) HubAddr() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.hubAddr
+}
+
+// UpdateEndpoints применяет новые адреса: останавливает сервер, меняет
+// настройки и поднимает снова. Если новый адрес занят, возвращает прежние.
+func (a *serverApp) UpdateEndpoints(listen, hub string) error {
+	listen = strings.TrimSpace(listen)
+	hub = strings.TrimSpace(hub)
+	if listen == "" {
+		return errors.New("адрес контроля не может быть пустым")
+	}
+	if _, _, err := net.SplitHostPort(listen); err != nil {
+		return fmt.Errorf("контроль: %w", err)
+	}
+	if hub != "" {
+		if _, _, err := net.SplitHostPort(hub); err != nil {
+			return fmt.Errorf("хаб: %w", err)
+		}
+	}
+
+	a.mu.Lock()
+	oldListen, oldHub, wasRunning := a.listen, a.hubAddr, a.running
+	a.mu.Unlock()
+
+	a.Stop()
+	a.mu.Lock()
+	a.listen, a.hubAddr = listen, hub
+	a.mu.Unlock()
+
+	if !wasRunning {
+		return nil
+	}
+	if err := a.Start(); err != nil {
+		a.mu.Lock()
+		a.listen, a.hubAddr = oldListen, oldHub
+		a.mu.Unlock()
+		_ = a.Start()
+		return fmt.Errorf("не удалось применить: %v (вернули %s и %s)", err, oldListen, oldHub)
+	}
+	return nil
+}
+
 func (a *serverApp) StartupError() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -168,8 +220,19 @@ func main() {
 	console.UTF8()
 	logPath, _ := logx.Setup("server")
 
-	listen := flag.String("listen", "0.0.0.0:8787", "адрес и порт control-сервера")
-	hubAddr := flag.String("hub", "0.0.0.0:8788", "адрес QUIC-хаба; пусто — не запускать")
+	settingsFile := settingsPath()
+	saved := loadUISettings(settingsFile)
+	listenDefault := "0.0.0.0:8787"
+	if saved.Listen != "" {
+		listenDefault = saved.Listen
+	}
+	hubDefault := "0.0.0.0:8788"
+	if saved.Hub != "" {
+		hubDefault = saved.Hub
+	}
+
+	listen := flag.String("listen", listenDefault, "адрес и порт control-сервера")
+	hubAddr := flag.String("hub", hubDefault, "адрес QUIC-хаба; пусто — не запускать")
 	storePath := flag.String("store", "server.json", "файл состояния координатора")
 	certFile := flag.String("tls-cert", "", "сертификат TLS; пусто — работа без TLS (только для локальной отладки)")
 	keyFile := flag.String("tls-key", "", "ключ TLS")
@@ -190,15 +253,16 @@ func main() {
 	fingerprint := tunnel.Fingerprint(cert.Certificate[0])
 
 	app := &serverApp{
-		store:       store,
-		cert:        cert,
-		fingerprint: fingerprint,
-		listen:      *listen,
-		hubAddr:     *hubAddr,
-		storePath:   resolvedStore,
-		logPath:     logPath,
-		certFile:    *certFile,
-		keyFile:     *keyFile,
+		store:        store,
+		cert:         cert,
+		fingerprint:  fingerprint,
+		listen:       *listen,
+		hubAddr:      *hubAddr,
+		storePath:    resolvedStore,
+		logPath:      logPath,
+		certFile:     *certFile,
+		keyFile:      *keyFile,
+		settingsFile: settingsFile,
 	}
 
 	log.Printf("отпечаток сертификата хаба: %s", fingerprint)
