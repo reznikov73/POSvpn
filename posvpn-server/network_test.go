@@ -68,6 +68,35 @@ func TestDeleteNetworkRemovesNodes(t *testing.T) {
 	}
 }
 
+// TestSubnetReusedAfterDelete — после удаления сети её подсеть отдаётся новой:
+// иначе 254 создания исчерпали бы адреса при двух живых сетях.
+func TestSubnetReusedAfterDelete(t *testing.T) {
+	store := newTestStore(t)
+
+	first, _, err := store.CreateNetwork("n_1", "one", "hash", engine.Node{Name: "a", TokenHash: "h1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := store.CreateNetwork("n_2", "two", "hash", engine.Node{Name: "b", TokenHash: "h2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Subnet != "10.77.1.0/24" || second.Subnet != "10.77.2.0/24" {
+		t.Fatalf("подсети: %q и %q", first.Subnet, second.Subnet)
+	}
+
+	if _, err := store.DeleteNetwork(first.ID); err != nil {
+		t.Fatal(err)
+	}
+	third, _, err := store.CreateNetwork("n_3", "three", "hash", engine.Node{Name: "c", TokenHash: "h3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Subnet != "10.77.1.0/24" {
+		t.Fatalf("освобождённая подсеть не переиспользована: %q", third.Subnet)
+	}
+}
+
 // TestDeleteNetworkUnknown — повторное удаление даёт понятную ошибку.
 func TestDeleteNetworkUnknown(t *testing.T) {
 	store := newTestStore(t)

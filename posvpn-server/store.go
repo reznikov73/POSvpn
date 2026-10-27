@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -141,11 +143,12 @@ func (s *Store) CreateNetwork(networkID, name, passwordHash string, node engine.
 			return engine.Network{}, engine.Node{}, ErrNetworkExists
 		}
 	}
-	if s.st.NextSubnet > 254 {
+	free := s.freeSubnetLocked()
+	if free == 0 {
 		return engine.Network{}, engine.Node{}, ErrSubnetExhausted
 	}
 
-	subnet, err := engine.NetworkSubnet(s.st.NextSubnet)
+	subnet, err := engine.NetworkSubnet(free)
 	if err != nil {
 		return engine.Network{}, engine.Node{}, err
 	}
@@ -168,9 +171,8 @@ func (s *Store) CreateNetwork(networkID, name, passwordHash string, node engine.
 
 	s.st.Networks = append(s.st.Networks, net)
 	s.st.Nodes = append(s.st.Nodes, node)
-	s.st.NextSubnet++
+	s.st.NextSubnet = free + 1
 	s.bumpVersionLocked()
-
 	if err := s.saveLocked(); err != nil {
 		return engine.Network{}, engine.Node{}, err
 	}
@@ -215,6 +217,37 @@ func (s *Store) NodesOf(networkID string) []engine.Node {
 		}
 	}
 	return out
+}
+
+// freeSubnetLocked ищет наименьший свободный номер подсети 1..254. Номер
+// удалённой сети освобождается: иначе после 254 созданных сетей сервер
+// упёрся бы в предел, хотя живых сетей может быть две.
+func (s *Store) freeSubnetLocked() int {
+	used := make(map[int]struct{}, len(s.st.Networks))
+	for _, net := range s.st.Networks {
+		if n, ok := subnetNumber(net.Subnet); ok {
+			used[n] = struct{}{}
+		}
+	}
+	for n := 1; n <= 254; n++ {
+		if _, busy := used[n]; !busy {
+			return n
+		}
+	}
+	return 0
+}
+
+// subnetNumber вытаскивает N из «10.77.N.0/24».
+func subnetNumber(subnet string) (int, bool) {
+	parts := strings.Split(subnet, ".")
+	if len(parts) < 4 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // DeleteNetwork удаляет сеть вместе с её узлами. Чужие индексы и адреса
