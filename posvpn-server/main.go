@@ -38,6 +38,7 @@ type serverApp struct {
 	certFile     string
 	keyFile      string
 	settingsFile string
+	tlsSelf      bool
 
 	mu           sync.Mutex
 	running      bool
@@ -93,6 +94,13 @@ func (a *serverApp) Start() error {
 		if a.certFile != "" && a.keyFile != "" {
 			log.Printf("POSvpn coordinator слушает https://%s", a.listen)
 			serveErr = srv.ServeTLS(listener, a.certFile, a.keyFile)
+		} else if a.tlsSelf {
+			srv.TLSConfig = &tls.Config{
+				Certificates: []tls.Certificate{a.cert},
+				MinVersion:   tls.VersionTLS12,
+			}
+			log.Printf("POSvpn coordinator слушает https://%s (сертификат хаба, клиентам нужен -pin)", a.listen)
+			serveErr = srv.ServeTLS(listener, "", "")
 		} else {
 			log.Printf("POSvpn coordinator слушает http://%s — ВНИМАНИЕ: без TLS, только для отладки", a.listen)
 			serveErr = srv.Serve(listener)
@@ -239,6 +247,7 @@ func main() {
 	guiFlag := flag.Bool("gui", defaultGUIFlag(), "открыть окно сервера (Windows)")
 	consoleFlag := flag.Bool("console", false, "работать без окна: служба, VPS, отладка")
 	minimized := flag.Bool("minimized", false, "запустить свёрнутым в трей")
+	tlsSelf := flag.Bool("tls", false, "HTTPS для control-API на сертификате хаба (клиентам нужен -pin)")
 	flag.Parse()
 
 	resolvedStore := resolveStorePath(*storePath)
@@ -247,7 +256,7 @@ func main() {
 		log.Fatalf("состояние не загружено: %v", err)
 	}
 
-	cert, err := tunnel.SelfSignedCertificate()
+	cert, err := tunnel.LoadOrCreateCertificate(certificateDir(resolvedStore))
 	if err != nil {
 		log.Fatalf("сертификат хаба: %v", err)
 	}
@@ -264,6 +273,7 @@ func main() {
 		certFile:     *certFile,
 		keyFile:      *keyFile,
 		settingsFile: settingsFile,
+		tlsSelf:      *tlsSelf,
 	}
 
 	log.Printf("отпечаток сертификата хаба: %s", fingerprint)
@@ -299,6 +309,28 @@ func localOnlyListen(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// certificateDir выбирает каталог для сертификата хаба: рядом с состоянием,
+// а если он недоступен на запись (Program Files) — в ProgramData.
+func certificateDir(storePath string) string {
+	dir := filepath.Dir(storePath)
+	if err := os.MkdirAll(dir, 0o755); err == nil {
+		test := filepath.Join(dir, ".posvpn-write-test")
+		if file, err := os.Create(test); err == nil {
+			file.Close()
+			_ = os.Remove(test)
+			return dir
+		}
+	}
+
+	base := os.Getenv("ProgramData")
+	if base == "" {
+		base = `C:\ProgramData`
+	}
+	dir = filepath.Join(base, "POSvpn")
+	_ = os.MkdirAll(dir, 0o755)
+	return dir
 }
 
 func waitForSignal() {

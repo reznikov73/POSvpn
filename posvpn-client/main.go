@@ -22,6 +22,7 @@ import (
 	"posvpn-engine"
 	"posvpn-engine/console"
 	"posvpn-engine/logx"
+	"posvpn-engine/tunnel"
 )
 
 // logPath — файл журнала клиента, показывается в окне.
@@ -138,6 +139,7 @@ func runAuth(args []string, create bool) error {
 	server := fs.String("server", "", "адрес координатора (по умолчанию "+defaultServer+")")
 	network := fs.String("network", "", "имя сети")
 	password := fs.String("password", "", "пароль сети")
+	pin := fs.String("pin", "", "отпечаток сертификата сервера (hex) для https")
 	nodeName := fs.String("node", hostname(), "имя этого компьютера в сети")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -168,6 +170,13 @@ func runAuth(args []string, create bool) error {
 			return err
 		}
 		cfg.PrivateKey, cfg.PublicKey = pair.Private, pair.Public
+	}
+
+	if *pin != "" {
+		cfg.HubPin = strings.TrimSpace(*pin)
+		if err := saveConfig(cfg); err != nil {
+			return err
+		}
 	}
 
 	var (
@@ -271,7 +280,7 @@ func call(method, url, token string, body, out any) error {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := apiClientFor(url)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("координатор недоступен (%s): %w", url, err)
@@ -297,6 +306,18 @@ func call(method, url, token string, body, out any) error {
 		}
 	}
 	return nil
+}
+
+// apiClientFor собирает HTTP-клиент. Для https с отпечатком проверяем именно
+// тот сертификат, который задан в настройках (самоподписанный хаб).
+func apiClientFor(rawURL string) *http.Client {
+	client := &http.Client{Timeout: 15 * time.Second}
+	if strings.HasPrefix(rawURL, "https://") {
+		if cfg, err := loadConfig(); err == nil && cfg.HubPin != "" {
+			client.Transport = &http.Transport{TLSClientConfig: tunnel.PinTLSConfig(cfg.HubPin)}
+		}
+	}
+	return client
 }
 
 func configPath() (string, error) {

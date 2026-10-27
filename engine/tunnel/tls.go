@@ -10,10 +10,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -21,6 +24,73 @@ import (
 // ALPN — протокол QUIC-хаба. Клиент и сервер обязаны совпасть, иначе
 // рукопожатие не состоится.
 const ALPN = "posvpn-hub/1"
+
+// LoadOrCreateCertificate читает самоподписанный сертификат хаба из каталога
+// или создаёт и сохраняет новый. Постоянный сертификат нужен, чтобы отпечаток
+// для -pin не менялся после каждого перезапуска сервера.
+func LoadOrCreateCertificate(dir string) (tls.Certificate, error) {
+	certPath := filepath.Join(dir, "hub-cert.pem")
+	keyPath := filepath.Join(dir, "hub-key.pem")
+
+	if fileExists(certPath) && fileExists(keyPath) {
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err == nil {
+			return cert, nil
+		}
+		// Битые файлы не должны блокировать запуск: перевыпускаем.
+		_ = os.Remove(certPath)
+		_ = os.Remove(keyPath)
+	}
+
+	cert, err := SelfSignedCertificate()
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	key, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
+	if !ok {
+		return tls.Certificate{}, errors.New("неожиданный тип ключа сертификата")
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("ключ сертификата: %w", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		return tls.Certificate{}, fmt.Errorf("запись %s: %w", certPath, err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		return tls.Certificate{}, fmt.Errorf("запись %s: %w", keyPath, err)
+	}
+	return cert, nil
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+// PinTLSConfig — TLS для HTTPS-API с проверкой отпечатка вместо цепочки.
+// Сертификат самоподписанный, поэтому проверяем именно тот, что задал пользователь.
+func PinTLSConfig(pin string) *tls.Config {
+	cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}
+	if pin == "" {
+		return cfg
+	}
+	want := normalizePin(pin)
+	cfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("сервер не прислал сертификат")
+		}
+		got := Fingerprint(rawCerts[0])
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			return fmt.Errorf("отпечаток сервера не совпал: получен %s", got)
+		}
+		return nil
+	}
+	return cfg
+}
 
 // SelfSignedCertificate выпускает самоподписанный сертификат для хаба.
 // Для MVP этого достаточно: трафик узлов всё равно шифруется отдельно,
