@@ -273,12 +273,14 @@ func main() {
 
 	resolvedStore := resolveStorePath(*storePath)
 	if portable && *storePath == storeDefault {
-		// Первый запуск рядом с программой: подхватываем состояние из текущего каталога.
-		_ = datadir.CopyIfMissing("server.json", resolvedStore)
+		migrateStore(resolvedStore)
 	}
 	store, err := OpenStore(resolvedStore)
 	if err != nil {
 		log.Fatalf("состояние не загружено: %v", err)
+	}
+	if store.Empty() {
+		log.Printf("состояние пустое: сетей нет (%s). Все прежние токены клиентов будут отвергнуты — скопируйте сюда server.json от прошлой установки или создайте сеть заново", resolvedStore)
 	}
 
 	certDir := certificateDir(resolvedStore)

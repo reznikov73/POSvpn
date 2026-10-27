@@ -25,8 +25,8 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 
-	"posvpn-engine/logx"
 	"posvpn-engine/datadir"
+	"posvpn-engine/logx"
 	"posvpn-engine/tunnel"
 )
 

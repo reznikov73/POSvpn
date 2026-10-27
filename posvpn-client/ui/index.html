@@ -380,6 +380,23 @@
 
   .about p { margin: 0 0 8px; color: #c6d3e3; font-size: 12px; line-height: 1.5; }
   .about .mono { font-family: Consolas, monospace; color: var(--muted); }
+  .sheet.settings { max-height: 94vh; display: flex; flex-direction: column; padding: 14px 14px 0; }
+  .sheet-body { overflow-y: auto; min-height: 0; padding-right: 2px; }
+  .sheet-body::-webkit-scrollbar { width: 6px; }
+  .sheet-body::-webkit-scrollbar-thumb { background: #2f3a4b; border-radius: 6px; }
+  .row.sticky { margin-top: 0; padding: 10px 0 14px; background: #1d2531; }
+  .btn.small { padding: 6px 9px; font-size: 12px; flex: none; }
+  .inline { display: flex; gap: 6px; align-items: center; }
+  .inline input { flex: 1; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; font-size: 12.5px; }
+  .check input { width: 15px; height: 15px; accent-color: var(--accent); }
+  .sheet.settings .section-title { margin: 10px 0 4px; }
+  .sheet.settings .info-row { padding: 1px 0; font-size: 12px; }
+  .sheet.settings .field { margin-bottom: 6px; }
+  .sheet.settings .field label { margin-bottom: 2px; font-size: 10px; }
+  .sheet.settings .field input { padding: 6px 8px; font-size: 12.5px; }
+  .sheet.settings .hint { margin: 4px 0 0; font-size: 10.5px; line-height: 1.35; }
+  .sheet.settings h2 { margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -495,46 +512,44 @@
 <div class="modal" id="settingsModal">
   <div class="sheet settings">
     <h2>Настройки</h2>
+    <div class="sheet-body">
+      <div class="section-title">Этот компьютер</div>
+      <div class="info-row"><span>Имя</span><b id="setName">—</b></div>
+      <div class="info-row"><span>ID узла</span><b id="setNodeID">—</b></div>
+      <div class="info-row"><span>Адрес</span><b id="setIP">—</b></div>
+      <div class="info-row"><span>Режим</span><b id="setMode">—</b></div>
 
-    <div class="section-title">Этот компьютер</div>
-    <div class="info-row"><span>Имя</span><b id="setName">—</b></div>
-    <div class="info-row"><span>ID узла</span><b id="setNodeID">—</b></div>
-    <div class="info-row"><span>Адрес</span><b id="setIP">—</b></div>
-    <div class="info-row"><span>Режим</span><b id="setMode">—</b></div>
+      <div class="section-title">Служба</div>
+      <div class="info-row"><span>Состояние</span><b id="setSvcState">—</b></div>
+      <div class="btn-grid">
+        <button class="btn primary" id="svcToggle" type="button">Установить</button>
+        <button class="btn" id="svcRemove" type="button">Удалить</button>
+      </div>
+      <p class="hint" id="svcHint">Служба держит туннель без окна и без UAC, запускается вместе с Windows.</p>
 
-    <div class="section-title">Служба</div>
-    <div class="info-row"><span>Состояние</span><b id="setSvcState">—</b></div>
-    <div class="btn-grid">
-      <button class="btn" type="button" data-service="install">Установить</button>
-      <button class="btn" type="button" data-service="start">Запустить</button>
-      <button class="btn" type="button" data-service="stop">Остановить</button>
-      <button class="btn" type="button" data-service="uninstall">Удалить</button>
+      <div class="section-title">Подключение</div>
+      <div class="field">
+        <label for="setServer">Сервер</label>
+        <input id="setServer" placeholder="http://127.0.0.1:8787" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="setHub">Хаб (пусто — тот же хост, порт 8788)</label>
+        <input id="setHub" placeholder="авто" autocomplete="off">
+      </div>
+      <label class="check"><input type="checkbox" id="setTls"> Подключаться по HTTPS</label>
+      <p class="hint">Для самоподписанного сертификата нужен отпечаток ниже.</p>
+
+      <div class="section-title">Безопасность</div>
+      <div class="field">
+        <label for="setPin">Отпечаток сертификата</label>
+        <div class="inline">
+          <input id="setPin" placeholder="64 hex" autocomplete="off">
+          <button class="btn small" id="pastePin" type="button">Вставить</button>
+        </div>
+      </div>
+      <div class="form-error" id="settingsError"></div>
     </div>
-    <p class="hint">Без службы окно работает, только пока открыто. Служба поднимает туннель при загрузке ПК и работает без входа в систему.</p>
-
-    <div class="section-title">Подключение</div>
-    <div class="field">
-      <label for="setServer">Сервер</label>
-      <input id="setServer" placeholder="http://127.0.0.1:8787" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="setHub">Хаб (пусто — тот же хост, порт 8788)</label>
-      <input id="setHub" placeholder="авто" autocomplete="off">
-    </div>
-    <label style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;font-size:13px">
-      <input type="checkbox" id="setTls" style="width:15px;height:15px"> Подключаться по HTTPS
-    </label>
-    <p class="hint">Сервер должен быть запущен с флагом -tls. Для самоподписанного сертификата обязателен отпечаток ниже.</p>
-
-    <div class="section-title">Безопасность</div>
-    <div class="field">
-      <label for="setPin">Отпечаток сертификата хаба (пусто — не проверять)</label>
-      <input id="setPin" placeholder="64 hex" autocomplete="off">
-      <button class="btn" id="pastePin" type="button" style="margin-top:6px;padding:7px 10px;font-size:12px">Вставить из буфера</button>
-    </div>
-
-    <div class="form-error" id="settingsError"></div>
-    <div class="row">
+    <div class="row sticky">
       <button class="btn" id="settingsCancel" type="button">Отмена</button>
       <button class="btn primary" id="settingsSave" type="button">Сохранить</button>
     </div>
@@ -717,6 +732,25 @@
     setText('setIP', STATE.configured ? (STATE.self_ip || '—') : '—');
     setText('setMode', STATE.service ? 'через службу' : 'локальный (нужны права администратора)');
     setText('setSvcState', STATE.service_running ? 'работает' : (STATE.service_installed ? 'остановлена' : 'не установлена'));
+    var installed = !!STATE.service_installed;
+    var running = !!STATE.service_running;
+    var elevated = !!STATE.elevated;
+    var toggle = $('svcToggle');
+    toggle.disabled = !elevated;
+    if (!installed) {
+      toggle.textContent = 'Установить';
+      toggle.dataset.cmd = 'install';
+    } else if (running) {
+      toggle.textContent = 'Остановить';
+      toggle.dataset.cmd = 'stop';
+    } else {
+      toggle.textContent = 'Запустить';
+      toggle.dataset.cmd = 'start';
+    }
+    $('svcRemove').disabled = !installed || !elevated;
+    $('svcHint').textContent = elevated
+      ? 'Служба держит туннель без окна и без UAC, запускается вместе с Windows.'
+      : 'Нужны права администратора: закройте окно и запустите от имени администратора.';
     $('setServer').value = STATE.server || '';
     $('setHub').value = STATE.hub || '';
     $('setTls').checked = (STATE.server || '').indexOf('https://') === 0;
@@ -783,23 +817,39 @@
     }
   });
 
-  document.querySelectorAll('[data-service]').forEach(function (button) {
-    button.addEventListener('click', async function () {
-      var command = button.getAttribute('data-service');
-      button.disabled = true;
-      var res = await act('service', { command: command });
-      button.disabled = false;
-      if (!res.ok) {
-        $('settingsError').textContent = res.error || 'Не удалось выполнить команду';
-        $('settingsError').style.display = 'block';
-        return;
-      }
-      setTimeout(function () {
-        refresh().then(function () {
-          if ($('settingsModal').classList.contains('show')) openSettings();
-        });
-      }, 1500);
-    });
+  $('svcToggle').addEventListener('click', async function () {
+    var command = this.dataset.cmd;
+    if (!command) return;
+    this.disabled = true;
+    var res = await act('service', { command: command });
+    this.disabled = false;
+    if (!res.ok) {
+      $('settingsError').textContent = res.error || 'Не удалось выполнить команду';
+      $('settingsError').style.display = 'block';
+      return;
+    }
+    setTimeout(function () {
+      refresh().then(function () {
+        if ($('settingsModal').classList.contains('show')) openSettings();
+      });
+    }, 1500);
+  });
+
+  $('svcRemove').addEventListener('click', async function () {
+    if (!confirm('Удалить службу POSvpn? Туннель остановится.')) return;
+    this.disabled = true;
+    var res = await act('service', { command: 'uninstall' });
+    this.disabled = false;
+    if (!res.ok) {
+      $('settingsError').textContent = res.error || 'Не удалось удалить службу';
+      $('settingsError').style.display = 'block';
+      return;
+    }
+    setTimeout(function () {
+      refresh().then(function () {
+        if ($('settingsModal').classList.contains('show')) openSettings();
+      });
+    }, 1500);
   });
 
   $('settingsSave').addEventListener('click', async function () {

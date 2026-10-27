@@ -50,6 +50,14 @@ func OpenStore(path string) (*Store, error) {
 	return s, nil
 }
 
+// Empty сообщает, что в состоянии нет ни одной сети. В этом случае токены
+// прежних клиентов неизвестны и любой вход получит 401.
+func (s *Store) Empty() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.st.Networks) == 0
+}
+
 // saveLocked пишет состояние во временный файл и переименовывает его,
 // чтобы падение процесса не оставило недописанный JSON.
 func (s *Store) saveLocked() error {
