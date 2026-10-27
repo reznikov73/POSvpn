@@ -48,6 +48,17 @@
   main::-webkit-scrollbar { width: 8px; }
   main::-webkit-scrollbar-thumb { background: #2f3a4b; border-radius: 8px; }
 
+  .banner {
+    display: none;
+    margin-bottom: 12px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    background: rgba(224,179,65,.12);
+    border: 1px solid rgba(224,179,65,.35);
+    color: #ffe2a3;
+  }
+
   .card {
     padding: 14px;
     border-radius: 12px;
@@ -174,6 +185,8 @@
   </header>
 
   <main>
+    <div class="banner" id="banner"></div>
+
     <section class="card">
       <div class="status">
         <div class="power on" id="power">
@@ -259,6 +272,14 @@
     setText('powerWord', running ? 'ON' : 'OFF');
     setText('stateTitle', running ? 'Работает' : 'Остановлен');
     setText('uptime', running && s.uptime ? 'работает ' + s.uptime : 'нажмите кнопку, чтобы запустить');
+
+    var banner = $('banner');
+    if (s.local_only) {
+      banner.textContent = 'Сервер слушает только этот компьютер (' + (s.listen || '') + '). Удалённые клиенты не подключатся — запустите с -listen 0.0.0.0:8787.';
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
 
     var errBox = $('error');
     if (s.error) {

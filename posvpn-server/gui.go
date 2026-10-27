@@ -36,6 +36,7 @@ type srvState struct {
 	Store       string        `json:"store"`
 	Log         string        `json:"log"`
 	Error       string        `json:"error"`
+	LocalOnly   bool          `json:"local_only"`
 	Networks    []NetworkView `json:"networks"`
 	Nodes       int           `json:"nodes"`
 	Received    uint64        `json:"received"`
@@ -94,6 +95,7 @@ func (g *serverGUI) State() (string, error) {
 		Store:       g.app.storePath,
 		Log:         g.app.logPath,
 		Error:       g.app.StartupError(),
+		LocalOnly:   localOnlyListen(g.app.listen),
 		Networks:    g.app.store.Snapshot(time.Now()),
 	}
 	if state.Running {

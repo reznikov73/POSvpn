@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -104,6 +105,9 @@ func (a *serverApp) Start() error {
 	}()
 
 	log.Printf("сервер запущен (control %s, хаб %s)", a.listen, a.hubAddr)
+	if localOnlyListen(a.listen) {
+		log.Printf("ВНИМАНИЕ: %s слушает только этот компьютер — удалённые клиенты не подключатся", a.listen)
+	}
 	return nil
 }
 
@@ -164,7 +168,7 @@ func main() {
 	console.UTF8()
 	logPath, _ := logx.Setup("server")
 
-	listen := flag.String("listen", "127.0.0.1:8787", "адрес и порт control-сервера")
+	listen := flag.String("listen", "0.0.0.0:8787", "адрес и порт control-сервера")
 	hubAddr := flag.String("hub", "0.0.0.0:8788", "адрес QUIC-хаба; пусто — не запускать")
 	storePath := flag.String("store", "server.json", "файл состояния координатора")
 	certFile := flag.String("tls-cert", "", "сертификат TLS; пусто — работа без TLS (только для локальной отладки)")
@@ -217,6 +221,19 @@ func main() {
 
 	log.Println("останавливаемся…")
 	app.Stop()
+}
+
+// localOnlyListen отвечает, слушает ли сервер только петлевой адрес.
+func localOnlyListen(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func waitForSignal() {
