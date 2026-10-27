@@ -665,25 +665,7 @@ func (a *guiApp) connect() error {
 		hub = defaultHubAddr(cfg.Server)
 	}
 
-	opt := tunnelOptions{
-		Server:     cfg.Server,
-		HubAddr:    hub,
-		Token:      cfg.Token,
-		NetworkID:  netmap.NetworkID,
-		Subnet:     subnet,
-		SelfIndex:  netmap.Self.Index,
-		SelfIP:     netmap.Self.IP,
-		PrivateKey: privateKey,
-		Pin:        cfg.HubPin,
-		MTU:        tunnel.DefaultMTU,
-		Adapter:    "POSvpn",
-		NetMap:     netmap,
-
-		ProxyEnabled: cfg.ProxyEnabled,
-		ProxyPort:    cfg.ProxyPort,
-		ProxyUser:    cfg.ProxyUser,
-		ProxyPass:    cfg.ProxyPass,
-	}
+	opt := tunnelOptionsFromConfig(cfg, netmap, subnet, privateKey, tunnel.DefaultMTU, "POSvpn")
 
 	go func() {
 		guiLog("connect: старт")

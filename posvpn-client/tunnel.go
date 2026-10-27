@@ -38,6 +38,36 @@ type tunnelOptions struct {
 	ProxyPass    string
 }
 
+// tunnelOptionsFromConfig собирает опции туннеля в одном месте.
+//
+// Раньше GUI, служба и CLI собирали их каждая сама, и новое поле легко было
+// забыть в одном из мест — так прокси не включился в службе.
+func tunnelOptionsFromConfig(cfg *config, netmap engine.NetMap, subnet netip.Prefix, privateKey []byte, mtu int, adapter string) tunnelOptions {
+	hub := cfg.Hub
+	if hub == "" {
+		hub = defaultHubAddr(cfg.Server)
+	}
+	return tunnelOptions{
+		Server:     cfg.Server,
+		HubAddr:    hub,
+		Token:      cfg.Token,
+		NetworkID:  netmap.NetworkID,
+		Subnet:     subnet,
+		SelfIndex:  netmap.Self.Index,
+		SelfIP:     netmap.Self.IP,
+		PrivateKey: privateKey,
+		Pin:        cfg.HubPin,
+		MTU:        mtu,
+		Adapter:    adapter,
+		NetMap:     netmap,
+
+		ProxyEnabled: cfg.ProxyEnabled,
+		ProxyPort:    cfg.ProxyPort,
+		ProxyUser:    cfg.ProxyUser,
+		ProxyPass:    cfg.ProxyPass,
+	}
+}
+
 // peerState — пир и его направленные шифры. Шифры переживают переподключение
 // к хабу: если начать счётчики заново с тем же ключом, пир отбросит кадры
 // как повторные.

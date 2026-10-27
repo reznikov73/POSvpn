@@ -677,23 +677,5 @@ func connectFromConfig() (*tunnelSession, error) {
 		return nil, fmt.Errorf("сервер прислал некорректную подсеть %q", netmap.Subnet)
 	}
 
-	hub := cfg.Hub
-	if hub == "" {
-		hub = defaultHubAddr(cfg.Server)
-	}
-
-	return startTunnelSession(tunnelOptions{
-		Server:     cfg.Server,
-		HubAddr:    hub,
-		Token:      cfg.Token,
-		NetworkID:  netmap.NetworkID,
-		Subnet:     subnet,
-		SelfIndex:  netmap.Self.Index,
-		SelfIP:     netmap.Self.IP,
-		PrivateKey: privateKey,
-		Pin:        cfg.HubPin,
-		MTU:        tunnel.DefaultMTU,
-		Adapter:    "POSvpn",
-		NetMap:     netmap,
-	})
+	return startTunnelSession(tunnelOptionsFromConfig(cfg, netmap, subnet, privateKey, tunnel.DefaultMTU, "POSvpn"))
 }

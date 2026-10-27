@@ -79,25 +79,7 @@ func runUp(args []string) error {
 	fmt.Printf("Хаб: %s, участников: %d\n", cfg.Hub, len(netmap.Peers)+1)
 	fmt.Println("Туннель поднимается. Ctrl+C — остановить.")
 
-	session, err := startTunnelSession(tunnelOptions{
-		Server:     cfg.Server,
-		HubAddr:    cfg.Hub,
-		Token:      cfg.Token,
-		NetworkID:  netmap.NetworkID,
-		Subnet:     subnet,
-		SelfIndex:  netmap.Self.Index,
-		SelfIP:     netmap.Self.IP,
-		PrivateKey: privateKey,
-		Pin:        cfg.HubPin,
-		MTU:        *mtu,
-		Adapter:    *adapter,
-		NetMap:     netmap,
-
-		ProxyEnabled: cfg.ProxyEnabled,
-		ProxyPort:    cfg.ProxyPort,
-		ProxyUser:    cfg.ProxyUser,
-		ProxyPass:    cfg.ProxyPass,
-	})
+	session, err := startTunnelSession(tunnelOptionsFromConfig(cfg, netmap, subnet, privateKey, *mtu, *adapter))
 	if err != nil {
 		return err
 	}

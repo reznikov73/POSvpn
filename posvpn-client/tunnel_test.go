@@ -134,3 +134,47 @@ func TestPeerSetRequiresSelfIndex(t *testing.T) {
 		t.Fatal("карта без индекса узла должна отвергаться")
 	}
 }
+
+// TestTunnelOptionsFromConfig — опции туннеля собираются в одном месте, поэтому
+// настройки прокси попадают в них при любом запуске: окно, служба и CLI.
+// Раньше служба собирала опции сама и теряла эти поля, из-за чего на
+// узле-шлюзе прокси не поднимался.
+func TestTunnelOptionsFromConfig(t *testing.T) {
+	cfg := &config{
+		Server:       "https://hub.example:8443",
+		Token:        "token",
+		ProxyEnabled: true,
+		ProxyPort:    9050,
+		ProxyUser:    "user",
+		ProxyPass:    "pass",
+	}
+	netmap := engine.NetMap{
+		NetworkID: "net-1",
+		Self:      engine.Peer{Index: 3, IP: "10.77.1.1"},
+	}
+	subnet := netip.MustParsePrefix("10.77.1.0/24")
+	privateKey := make([]byte, 32)
+
+	opt := tunnelOptionsFromConfig(cfg, netmap, subnet, privateKey, tunnel.DefaultMTU, "POSvpn")
+
+	if opt.HubAddr != "hub.example:8788" {
+		t.Fatalf("адрес хаба %q, ожидался вывод из адреса сервера", opt.HubAddr)
+	}
+	if opt.Server != cfg.Server || opt.Token != cfg.Token || opt.NetworkID != netmap.NetworkID {
+		t.Fatalf("опции потеряли данные входа: %+v", opt)
+	}
+	if opt.Subnet != subnet || opt.SelfIndex != 3 || opt.SelfIP != "10.77.1.1" {
+		t.Fatalf("опции потеряли адресацию узла: %+v", opt)
+	}
+	if opt.MTU != tunnel.DefaultMTU || opt.Adapter != "POSvpn" {
+		t.Fatalf("опции потеряли параметры адаптера: %+v", opt)
+	}
+	if !opt.ProxyEnabled || opt.ProxyPort != 9050 || opt.ProxyUser != "user" || opt.ProxyPass != "pass" {
+		t.Fatalf("опции потеряли настройки прокси: %+v", opt)
+	}
+
+	cfg.Hub = "10.1.1.1:8788"
+	if opt := tunnelOptionsFromConfig(cfg, netmap, subnet, privateKey, tunnel.DefaultMTU, "POSvpn"); opt.HubAddr != cfg.Hub {
+		t.Fatalf("заданный адрес хаба перезаписан: %q", opt.HubAddr)
+	}
+}
