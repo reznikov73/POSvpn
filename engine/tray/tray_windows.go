@@ -21,32 +21,32 @@ import (
 )
 
 const (
-	wmApp            = 0x8000
-	wmTrayCallback   = wmApp + 1
-	wmCommand        = 0x111
-	wmClose          = 0x0010
-	wmDestroy        = 0x0002
-	wmLButtonUp      = 0x0202
-	wmLButtonDblClk  = 0x0203
-	wmRButtonUp      = 0x0205
-	hwndMessage      = ^uintptr(2) // (HWND)-3, окно только для сообщений
-	nimAdd           = 0x00000000
-	nimModify        = 0x00000001
-	nimDelete        = 0x00000002
-	nifMessage       = 0x00000001
-	nifIcon          = 0x00000002
-	nifTip           = 0x00000004
-	imageIcon        = 1
-	lrDefaultSize    = 0x00000040
-	lrShared         = 0x00008000
-	mfString         = 0x00000000
-	mfGrayed         = 0x00000001
-	mfSeparator      = 0x00000800
-	tpmRightButton   = 0x0002
-	tpmReturnCmd     = 0x0100
-	swHide           = 0
-	swShow           = 5
-	gwlpWndProc      = ^uintptr(3) // (DWORD)-4
+	wmApp           = 0x8000
+	wmTrayCallback  = wmApp + 1
+	wmCommand       = 0x111
+	wmClose         = 0x0010
+	wmDestroy       = 0x0002
+	wmLButtonUp     = 0x0202
+	wmLButtonDblClk = 0x0203
+	wmRButtonUp     = 0x0205
+	hwndMessage     = ^uintptr(2) // (HWND)-3, окно только для сообщений
+	nimAdd          = 0x00000000
+	nimModify       = 0x00000001
+	nimDelete       = 0x00000002
+	nifMessage      = 0x00000001
+	nifIcon         = 0x00000002
+	nifTip          = 0x00000004
+	imageIcon       = 1
+	lrDefaultSize   = 0x00000040
+	lrShared        = 0x00008000
+	mfString        = 0x00000000
+	mfGrayed        = 0x00000001
+	mfSeparator     = 0x00000800
+	tpmRightButton  = 0x0002
+	tpmReturnCmd    = 0x0100
+	swHide          = 0
+	swShow          = 5
+	gwlpWndProc     = ^uintptr(3) // (DWORD)-4
 )
 
 // Item — пункт меню. Separator рисует разделитель, ID тогда не нужен.
@@ -119,27 +119,27 @@ var (
 	shell32  = windows.NewLazySystemDLL("shell32.dll")
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
-	procRegisterClassExW  = user32.NewProc("RegisterClassExW")
-	procCreateWindowExW   = user32.NewProc("CreateWindowExW")
-	procDefWindowProcW    = user32.NewProc("DefWindowProcW")
-	procGetMessageW       = user32.NewProc("GetMessageW")
-	procTranslateMessage  = user32.NewProc("TranslateMessage")
-	procDispatchMessageW  = user32.NewProc("DispatchMessageW")
-	procPostQuitMessage   = user32.NewProc("PostQuitMessage")
-	procDestroyWindow     = user32.NewProc("DestroyWindow")
-	procLoadImageW        = user32.NewProc("LoadImageW")
-	procCreatePopupMenu   = user32.NewProc("CreatePopupMenu")
-	procAppendMenuW       = user32.NewProc("AppendMenuW")
-	procDestroyMenu       = user32.NewProc("DestroyMenu")
-	procTrackPopupMenu    = user32.NewProc("TrackPopupMenu")
-	procGetCursorPos      = user32.NewProc("GetCursorPos")
-	procSetForeground     = user32.NewProc("SetForegroundWindow")
-	procShowWindow        = user32.NewProc("ShowWindow")
-	procSetWindowLongPtr  = user32.NewProc("SetWindowLongPtrW")
-	procCallWindowProc    = user32.NewProc("CallWindowProcW")
-	procPostMessageW      = user32.NewProc("PostMessageW")
-	procShellNotifyIconW  = shell32.NewProc("Shell_NotifyIconW")
-	procGetModuleHandleW  = kernel32.NewProc("GetModuleHandleW")
+	procRegisterClassExW = user32.NewProc("RegisterClassExW")
+	procCreateWindowExW  = user32.NewProc("CreateWindowExW")
+	procDefWindowProcW   = user32.NewProc("DefWindowProcW")
+	procGetMessageW      = user32.NewProc("GetMessageW")
+	procTranslateMessage = user32.NewProc("TranslateMessage")
+	procDispatchMessageW = user32.NewProc("DispatchMessageW")
+	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
+	procDestroyWindow    = user32.NewProc("DestroyWindow")
+	procLoadImageW       = user32.NewProc("LoadImageW")
+	procCreatePopupMenu  = user32.NewProc("CreatePopupMenu")
+	procAppendMenuW      = user32.NewProc("AppendMenuW")
+	procDestroyMenu      = user32.NewProc("DestroyMenu")
+	procTrackPopupMenu   = user32.NewProc("TrackPopupMenu")
+	procGetCursorPos     = user32.NewProc("GetCursorPos")
+	procSetForeground    = user32.NewProc("SetForegroundWindow")
+	procShowWindow       = user32.NewProc("ShowWindow")
+	procSetWindowLongPtr = user32.NewProc("SetWindowLongPtrW")
+	procCallWindowProc   = user32.NewProc("CallWindowProcW")
+	procPostMessageW     = user32.NewProc("PostMessageW")
+	procShellNotifyIconW = shell32.NewProc("Shell_NotifyIconW")
+	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
 
 	registerOnce sync.Once
 	registerErr  error
