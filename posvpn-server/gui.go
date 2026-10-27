@@ -39,6 +39,7 @@ type settingsRequest struct {
 type srvState struct {
 	Running     bool          `json:"running"`
 	Listen      string        `json:"listen"`
+	Scheme      string        `json:"scheme"`
 	Hub         string        `json:"hub"`
 	Fingerprint string        `json:"fingerprint"`
 	Uptime      string        `json:"uptime"`
@@ -184,6 +185,7 @@ func (g *serverGUI) State() (string, error) {
 	state := srvState{
 		Running:     g.app.Running(),
 		Listen:      g.app.ListenAddr(),
+		Scheme:      "http",
 		Hub:         g.app.HubAddr(),
 		Fingerprint: g.app.fingerprint,
 		Store:       g.app.storePath,
@@ -193,6 +195,9 @@ func (g *serverGUI) State() (string, error) {
 		CertPath:    g.app.CertificatePath(),
 		LocalOnly:   localOnlyListen(g.app.ListenAddr()),
 		Networks:    g.app.store.Snapshot(time.Now()),
+	}
+	if g.app.TLS() {
+		state.Scheme = "https"
 	}
 	if state.Running {
 		state.Uptime = time.Since(g.app.StartedAt()).Round(time.Second).String()

@@ -17,7 +17,7 @@ func StartHub(store *Store, addr string, cert tls.Certificate) (*tunnel.Hub, err
 		Auth: func(token string) (tunnel.Identity, error) {
 			node, ok := store.NodeByTokenHash(engine.HashToken(token))
 			if !ok {
-				return tunnel.Identity{}, errors.New("неизвестный токен узла")
+				return tunnel.Identity{}, errors.New("неизвестный токен узла: войдите в сеть заново")
 			}
 			if node.Blocked {
 				return tunnel.Identity{}, errors.New("узел заблокирован администратором сети")

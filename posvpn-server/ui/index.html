@@ -365,7 +365,7 @@
       errBox.style.display = 'none';
       errBox.textContent = '';
     }
-    setText('listen', s.listen || '—');
+    setText('listen', (s.scheme || 'http') + '://' + (s.listen || '—'));
     setText('hub', s.hub || 'выключен');
     setText('fingerprint', s.fingerprint || '—');
     setText('nodes', String(s.nodes || 0));

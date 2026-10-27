@@ -312,6 +312,22 @@ func (a *guiApp) collectState() guiState {
 
 	cfg, _ := loadConfig()
 
+	// Служба установлена, но не ответила: не подменяем её локальным режимом,
+	// иначе окно возьмёт устаревший токен и получит 401.
+	if installed, running := serviceStatusInfo(); installed {
+		state := guiState{
+			HasWintun:        hasWintun(),
+			Elevated:         isElevated(),
+			ServiceInstalled: true,
+			ServiceRunning:   running,
+			Peers:            []guiPeer{},
+		}
+		if !running {
+			state.Error = "служба остановлена — запустите её в настройках"
+		}
+		return state
+	}
+
 	state := guiState{
 		HasWintun: hasWintun(),
 		Elevated:  isElevated(),
@@ -458,6 +474,11 @@ func (a *guiApp) serviceAction(name string, req guiRequest) (bool, error) {
 		Node:     req.Node,
 	})
 	if err != nil {
+		// Служба установлена, но не отвечает: локальный режим только запутает —
+		// у него свой конфиг и свой токен.
+		if installed, _ := serviceStatusInfo(); installed {
+			return true, errors.New("служба установлена, но не отвечает: запустите её в настройках")
+		}
 		return false, nil
 	}
 	if !resp.OK {
@@ -499,6 +520,8 @@ func (a *guiApp) applySettings(req guiRequest) (bool, error) {
 			return true, errors.New(resp.Error)
 		}
 		return true, nil
+	} else if installed, _ := serviceStatusInfo(); installed {
+		return true, errors.New("служба установлена, но не отвечает: запустите её в настройках")
 	}
 
 	cfg, err := loadConfig()
