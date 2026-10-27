@@ -42,8 +42,20 @@ if ($failed.Count -gt 0) {
 Write-Host "Всё собрано: $root\out" -ForegroundColor Green
 
 if (Test-Path $wintun) {
-    Copy-Item $wintun 'out\wintun.dll' -Force
-    Write-Host 'wintun.dll скопирован в out' -ForegroundColor Green
+    $dstDll = 'out\wintun.dll'
+    $same = (Test-Path $dstDll) -and ((Get-FileHash $wintun).Hash -eq (Get-FileHash $dstDll).Hash)
+    if ($same) {
+        Write-Host 'wintun.dll уже актуален' -ForegroundColor Green
+    } else {
+        try {
+            Copy-Item $wintun $dstDll -Force
+            Write-Host 'wintun.dll скопирован в out' -ForegroundColor Green
+        } catch {
+            # Клиент мог быть запущен и держать DLL. Это не повод валить сборку:
+            # exe уже собраны, а DLL в out\ уже есть.
+            Write-Host 'wintun.dll занят запущенным клиентом — оставляем как есть' -ForegroundColor Yellow
+        }
+    }
 } else {
     Write-Host 'ВНИМАНИЕ: wintun.dll отсутствует — туннель не запустится' -ForegroundColor Yellow
 }
