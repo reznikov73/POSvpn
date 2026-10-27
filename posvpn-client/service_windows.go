@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 
 	"posvpn-engine/logx"
+	"posvpn-engine/datadir"
 	"posvpn-engine/tunnel"
 )
 
@@ -70,6 +71,16 @@ func programDataDir() string {
 
 // setupServicePaths переключает настройки и журнал службы на ProgramData.
 func setupServicePaths() {
+	if dir, ok := datadir.PortableDataDir(); ok {
+		configOverride = filepath.Join(dir, "client.json")
+		if path, err := logx.SetupDir(filepath.Join(dir, "logs"), "service"); err == nil {
+			logPath = path
+		}
+		// Из прежнего места — только если рядом с программой настроек ещё нет.
+		_ = datadir.CopyIfMissing(filepath.Join(programDataDir(), "client.json"), configOverride)
+		return
+	}
+
 	dir := programDataDir()
 	_ = os.MkdirAll(dir, 0o755)
 	configOverride = filepath.Join(dir, "client.json")

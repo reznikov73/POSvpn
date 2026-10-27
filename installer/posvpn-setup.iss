@@ -55,6 +55,11 @@ Source: "{#RepoRoot}\out\posvpn-client.exe"; DestDir: "{app}"; Components: clien
 Source: "{#RepoRoot}\out\wintun.dll"; DestDir: "{app}"; Components: client; Flags: ignoreversion
 Source: "{#RepoRoot}\out\posvpn-server.exe"; DestDir: "{app}"; Components: server; Flags: ignoreversion
 Source: "{#RepoRoot}\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "portable.txt"; DestDir: "{app}"; Flags: ignoreversion
+
+[Dirs]
+; Данные рядом с программой: настройки, журналы, сертификат.
+Name: "{app}\data"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Icons]
 Name: "{group}\POSvpn Client"; Filename: "{app}\posvpn-client.exe"; Components: client

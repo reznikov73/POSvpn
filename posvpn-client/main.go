@@ -21,6 +21,7 @@ import (
 
 	"posvpn-engine"
 	"posvpn-engine/console"
+	"posvpn-engine/datadir"
 	"posvpn-engine/logx"
 	"posvpn-engine/tunnel"
 )
@@ -52,7 +53,15 @@ type config struct {
 
 func main() {
 	console.UTF8()
-	if path, err := logx.Setup("client"); err == nil {
+
+	// Портативная установка: настройки и журналы рядом с программой.
+	if dir, ok := datadir.PortableDataDir(); ok {
+		configOverride = filepath.Join(dir, "client.json")
+		if legacy, err := userConfigPath(); err == nil {
+			_ = datadir.CopyIfMissing(legacy, configOverride)
+		}
+	}
+	if path, err := setupLogging("client"); err == nil {
 		logPath = path
 	}
 	if len(os.Args) < 2 {
@@ -324,9 +333,13 @@ func configPath() (string, error) {
 	if configOverride != "" {
 		return configOverride, nil
 	}
+	return userConfigPath()
+}
+
+// userConfigPath — прежнее место настроек в профиле пользователя.
+func userConfigPath() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil || dir == "" {
-		// В службе и в урезанном окружении %AppData% может отсутствовать.
 		home, homeErr := os.UserHomeDir()
 		if homeErr != nil {
 			return "", fmt.Errorf("не удалось определить каталог настроек: %w", err)
@@ -334,6 +347,14 @@ func configPath() (string, error) {
 		dir = filepath.Join(home, "AppData", "Roaming")
 	}
 	return filepath.Join(dir, "POSvpn", "client.json"), nil
+}
+
+// setupLogging пишет журнал рядом с программой в портативном режиме.
+func setupLogging(component string) (string, error) {
+	if dir, ok := datadir.PortableDataDir(); ok {
+		return logx.SetupDir(filepath.Join(dir, "logs"), component)
+	}
+	return logx.Setup(component)
 }
 
 func loadConfig() (*config, error) {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"posvpn-engine/datadir"
 )
 
 // uiSettings — адреса, которые пользователь задал в окне сервера.
@@ -18,6 +20,9 @@ type uiSettings struct {
 
 // settingsPath — файл настроек окна рядом с журналами.
 func settingsPath() string {
+	if dir, ok := datadir.PortableDataDir(); ok {
+		return filepath.Join(dir, "server-ui.json")
+	}
 	dir, err := os.UserCacheDir()
 	if err != nil || dir == "" {
 		home, homeErr := os.UserHomeDir()

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"posvpn-engine/console"
+	"posvpn-engine/datadir"
 	"posvpn-engine/logx"
 	"posvpn-engine/tunnel"
 )
@@ -235,7 +236,14 @@ func (a *serverApp) Stats() (tunnel.Stats, bool) {
 
 func main() {
 	console.UTF8()
-	logPath, _ := logx.Setup("server")
+
+	portableDir, portable := datadir.PortableDataDir()
+	logPath := ""
+	if portable {
+		logPath, _ = logx.SetupDir(filepath.Join(portableDir, "logs"), "server")
+	} else {
+		logPath, _ = logx.Setup("server")
+	}
 
 	settingsFile := settingsPath()
 	saved := loadUISettings(settingsFile)
@@ -250,7 +258,11 @@ func main() {
 
 	listen := flag.String("listen", listenDefault, "адрес и порт control-сервера")
 	hubAddr := flag.String("hub", hubDefault, "адрес QUIC-хаба; пусто — не запускать")
-	storePath := flag.String("store", "server.json", "файл состояния координатора")
+	storeDefault := "server.json"
+	if portable {
+		storeDefault = filepath.Join(portableDir, "server.json")
+	}
+	storePath := flag.String("store", storeDefault, "файл состояния координатора")
 	certFile := flag.String("tls-cert", "", "сертификат TLS; пусто — работа без TLS (только для локальной отладки)")
 	keyFile := flag.String("tls-key", "", "ключ TLS")
 	guiFlag := flag.Bool("gui", defaultGUIFlag(), "открыть окно сервера (Windows)")
@@ -260,12 +272,19 @@ func main() {
 	flag.Parse()
 
 	resolvedStore := resolveStorePath(*storePath)
+	if portable && *storePath == storeDefault {
+		// Первый запуск рядом с программой: подхватываем состояние из текущего каталога.
+		_ = datadir.CopyIfMissing("server.json", resolvedStore)
+	}
 	store, err := OpenStore(resolvedStore)
 	if err != nil {
 		log.Fatalf("состояние не загружено: %v", err)
 	}
 
 	certDir := certificateDir(resolvedStore)
+	if portable {
+		certDir = portableDir
+	}
 	cert, err := tunnel.LoadOrCreateCertificate(certDir)
 	if err != nil {
 		log.Fatalf("сертификат хаба: %v", err)
