@@ -252,3 +252,32 @@ func TestPinnedFingerprint(t *testing.T) {
 		t.Fatal("подключение с неверным отпечатком должно падать")
 	}
 }
+
+// TestDropNetworkClosesSessions проверяет, что при удалении сети её узлы
+// отключаются, а узлы других сетей продолжают работать.
+func TestDropNetworkClosesSessions(t *testing.T) {
+	hub := testHub(t, map[string]Identity{
+		"tok-a": {NodeID: "u_a", NetworkID: "n1", Index: 1},
+		"tok-b": {NodeID: "u_b", NetworkID: "n2", Index: 1},
+	})
+	a := dialHub(t, hub, "tok-a")
+	b := dialHub(t, hub, "tok-b")
+
+	// Оба на месте: кадр из сети n2 доходит до своего пира невозможно (один узел),
+	// поэтому проверяем именно отключение сеанса сети n1.
+	if dropped := hub.DropNetwork("n1"); dropped != 1 {
+		t.Fatalf("отключено узлов %d, ожидался 1", dropped)
+	}
+	if _, err := receive(t, a, time.Second); err == nil {
+		t.Fatal("сеанс удалённой сети не закрыт")
+	}
+
+	// Сеть n2 не тронута: её узел по-прежнему в списке.
+	if got := len(hub.snapshot("n2")); got != 1 {
+		t.Fatalf("узлы сети n2: %d, ожидался 1", got)
+	}
+	if dropped := hub.DropNetwork("нет-такой"); dropped != 0 {
+		t.Fatalf("несуществующая сеть что-то отключила: %d", dropped)
+	}
+	_ = b
+}

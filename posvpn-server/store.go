@@ -217,6 +217,44 @@ func (s *Store) NodesOf(networkID string) []engine.Node {
 	return out
 }
 
+// DeleteNetwork удаляет сеть вместе с её узлами. Чужие индексы и адреса
+// не переиспользуются: они уходят вместе с сетью, а не отдаются новым сетям.
+func (s *Store) DeleteNetwork(networkID string) (engine.Network, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	index := -1
+	for i := range s.st.Networks {
+		if s.st.Networks[i].ID == networkID {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return engine.Network{}, errors.New("сеть не найдена")
+	}
+
+	removed := s.st.Networks[index]
+	networks := make([]engine.Network, 0, len(s.st.Networks)-1)
+	networks = append(networks, s.st.Networks[:index]...)
+	networks = append(networks, s.st.Networks[index+1:]...)
+	s.st.Networks = networks
+
+	nodes := make([]engine.Node, 0, len(s.st.Nodes))
+	for _, node := range s.st.Nodes {
+		if node.NetworkID != networkID {
+			nodes = append(nodes, node)
+		}
+	}
+	s.st.Nodes = nodes
+
+	s.bumpVersionLocked()
+	if err := s.saveLocked(); err != nil {
+		return engine.Network{}, err
+	}
+	return removed, nil
+}
+
 // AddNode добавляет узел в существующую сеть: проверяет имя, считает лимит
 // участников и выдаёт первый свободный адрес подсети.
 func (s *Store) AddNode(node engine.Node) (engine.Node, error) {
@@ -400,7 +438,9 @@ func (s *Store) NetMapFor(node engine.Node) (engine.NetMap, error) {
 }
 
 // NetworkView — снимок сети для окна сервера.
+// NetworkView — снимок сети для окна сервера.
 type NetworkView struct {
+	ID     string     `json:"id"`
 	Name   string     `json:"name"`
 	Subnet string     `json:"subnet"`
 	Closed bool       `json:"closed"`
@@ -424,7 +464,7 @@ func (s *Store) Snapshot(now time.Time) []NetworkView {
 
 	out := make([]NetworkView, 0, len(s.st.Networks))
 	for _, net := range s.st.Networks {
-		view := NetworkView{Name: net.Name, Subnet: net.Subnet, Closed: net.Closed}
+		view := NetworkView{ID: net.ID, Name: net.Name, Subnet: net.Subnet, Closed: net.Closed}
 		for _, node := range s.st.Nodes {
 			if node.NetworkID != net.ID {
 				continue

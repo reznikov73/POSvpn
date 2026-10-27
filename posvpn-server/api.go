@@ -58,7 +58,7 @@ func (s *Server) withAuth(next authedHandler) http.HandlerFunc {
 
 		node, ok := s.store.NodeByTokenHash(engine.HashToken(token))
 		if !ok {
-			writeError(w, http.StatusUnauthorized, "неизвестный токен: войдите в сеть заново")
+			writeError(w, http.StatusUnauthorized, "сеть удалена или вход отозван: войдите в сеть заново")
 			return
 		}
 		if node.Blocked {

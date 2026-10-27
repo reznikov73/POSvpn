@@ -244,6 +244,21 @@ func (g *serverGUI) Action(name, payload string) (string, error) {
 			Hub:    g.app.HubAddr(),
 			TLS:    g.app.TLS(),
 		})
+	case "delete_network":
+		var req struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		}
+		if parseErr := json.Unmarshal([]byte(payload), &req); parseErr != nil {
+			err = fmt.Errorf("удаление сети: %w", parseErr)
+			break
+		}
+		removed, deleteErr := g.app.DeleteNetwork(req.ID)
+		if deleteErr != nil {
+			err = deleteErr
+			break
+		}
+		log.Printf("сеть %q удалена вместе с узлами", removed.Name)
 	case "copy_fingerprint":
 		err = clipboard.Write(g.app.fingerprint)
 	case "quit":

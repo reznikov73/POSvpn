@@ -317,6 +317,17 @@ func (h *Hub) route(from *hubSession, frame []byte) {
 	h.forwarded.Add(1)
 }
 
+// DropNetwork закрывает сеансы всех узлов сети. Нужно при удалении сети:
+// иначе клиенты продолжали бы слать кадры в никуда и считали себя в сети.
+func (h *Hub) DropNetwork(networkID string) int {
+	hs := h.snapshot(networkID)
+	for _, sess := range hs {
+		h.unregister(sess)
+		_ = sess.conn.CloseWithError(0x10, "сеть удалена")
+	}
+	return len(hs)
+}
+
 func (s *hubSession) send(frame []byte) {
 	s.sendMu.Lock()
 	err := s.conn.SendDatagram(frame)

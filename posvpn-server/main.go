@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"posvpn-engine"
 	"posvpn-engine/console"
 	"posvpn-engine/datadir"
 	"posvpn-engine/logx"
@@ -232,6 +233,30 @@ func (a *serverApp) Stats() (tunnel.Stats, bool) {
 		return tunnel.Stats{}, false
 	}
 	return a.hub.Stats(), true
+}
+
+// DeleteNetwork удаляет сеть: закрывает сеансы её узлов в хабе и стирает
+// сеть с узлами из состояния. Возвращает удалённую сеть для журнала.
+func (a *serverApp) DeleteNetwork(networkID string) (engine.Network, error) {
+	network, ok := a.store.NetworkByID(networkID)
+	if !ok {
+		return engine.Network{}, errors.New("сеть не найдена")
+	}
+
+	a.mu.Lock()
+	hub := a.hub
+	a.mu.Unlock()
+	if hub != nil {
+		if dropped := hub.DropNetwork(networkID); dropped > 0 {
+			log.Printf("сеть %q: отключено узлов — %d", network.Name, dropped)
+		}
+	}
+
+	removed, err := a.store.DeleteNetwork(networkID)
+	if err != nil {
+		return engine.Network{}, err
+	}
+	return removed, nil
 }
 
 func main() {
