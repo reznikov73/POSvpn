@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"posvpn-engine/console"
+	"posvpn-engine/tray"
 	"posvpn-engine/tunnel"
 )
 
@@ -30,6 +32,8 @@ var guiHTML string
 // guiApp — окно и его связь с туннелем.
 type guiApp struct {
 	w webview2.WebView
+
+	tray *tray.Tray
 
 	mu       sync.Mutex
 	session  *tunnelSession
@@ -91,9 +95,93 @@ func guiLog(format string, args ...any) {
 	_, _ = fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
 }
 
+// showWindow возвращает окно из трея.
+func (a *guiApp) showWindow() {
+	if a.tray != nil {
+		a.tray.ShowWindow()
+	}
+}
+
+func (a *guiApp) isConnected() bool {
+	a.mu.Lock()
+	session := a.session
+	a.mu.Unlock()
+	if session == nil {
+		return false
+	}
+	_, connected, _ := session.status()
+	return connected
+}
+
+// trayToggle подключает или отключает туннель — и локальный, и через службу.
+func (a *guiApp) trayToggle() {
+	if resp, err := serviceCall(pipeRequest{Cmd: "status"}); err == nil && resp.State != nil {
+		command := "connect"
+		if resp.State.Connected || resp.State.Running {
+			command = "disconnect"
+		}
+		_, _ = serviceCall(pipeRequest{Cmd: command})
+		return
+	}
+	if a.isConnected() {
+		a.disconnect()
+		return
+	}
+	_ = a.connect()
+}
+
+func (a *guiApp) trayAction(id uint32) {
+	switch id {
+	case 1:
+		a.showWindow()
+	case 2:
+		a.trayToggle()
+	case 3:
+		a.showWindow()
+		if a.w != nil {
+			a.w.Eval("openSettings()")
+		}
+	case 4:
+		a.disconnect()
+		if a.tray != nil {
+			a.tray.AllowClose()
+			a.tray.Remove()
+		}
+		if a.w != nil {
+			a.w.Dispatch(func() { a.w.Terminate() })
+		}
+	}
+}
+
+func (a *guiApp) updateTray(s guiState) {
+	if a.tray == nil {
+		return
+	}
+	tip := "POSvpn · не подключено"
+	if s.Configured && s.Network != "" {
+		tip = "POSvpn · " + s.Network
+	}
+	if s.Connected {
+		tip = "POSvpn · " + s.Network + " · в сети"
+	}
+	a.tray.SetTooltip(tip)
+
+	connectTitle := "Подключиться"
+	if s.Connected || s.Running {
+		connectTitle = "Отключиться"
+	}
+	a.tray.SetItems([]tray.Item{
+		{ID: 1, Title: "Открыть"},
+		{ID: 2, Title: connectTitle, Disabled: !s.Configured},
+		{ID: 3, Title: "Настройки"},
+		{ID: 0, Separator: true},
+		{ID: 4, Title: "Выход"},
+	})
+}
+
 // runGUI открывает окно. Возвращает ошибку, если WebView2 недоступен.
 // autoConnect сразу поднимает туннель — удобно для автозапуска.
-func runGUI(autoConnect bool) error {
+func runGUI(autoConnect, minimized bool) error {
 	console.HideWindow()
 
 	dataPath := filepath.Join(os.Getenv("LOCALAPPDATA"), "POSvpn", "webview2")
@@ -140,17 +228,58 @@ func runGUI(autoConnect bool) error {
 	}
 
 	app.darkTitleBar()
+
+	trayIcon, trayErr := tray.Start(tray.Options{
+		Title:  "POSvpn",
+		IconID: 1,
+		Items: []tray.Item{
+			{ID: 1, Title: "Открыть"},
+			{ID: 2, Title: "Подключиться"},
+			{ID: 3, Title: "Настройки"},
+			{ID: 0, Separator: true},
+			{ID: 4, Title: "Выход"},
+		},
+		OnShow:   func() { app.showWindow() },
+		OnSelect: func(id uint32) { app.trayAction(id) },
+	})
+	if trayErr != nil {
+		log.Printf("трей: %v", trayErr)
+	} else {
+		app.tray = trayIcon
+		if err := trayIcon.HookClose(windows.HWND(uintptr(w.Window())), func() { trayIcon.HideWindow() }); err != nil {
+			log.Printf("трей: перехват закрытия окна: %v", err)
+		}
+		if minimized {
+			trayIcon.HideWindow()
+		}
+	}
+
 	if autoConnect {
 		go func() { _ = app.connect() }()
 	}
 	w.Run()
 
 	app.disconnect()
+	if app.tray != nil {
+		app.tray.Remove()
+	}
 	return nil
 }
 
 // State отдаёт в интерфейс всё, что нужно для отрисовки.
 func (a *guiApp) State() (string, error) {
+	state := a.collectState()
+	if a.tray != nil {
+		a.updateTray(state)
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (a *guiApp) collectState() guiState {
 	// Если служба запущена, она владеет туннелем и настройками — берём её состояние.
 	if resp, err := serviceCall(pipeRequest{Cmd: "status"}); err == nil && resp.State != nil {
 		// Локальный туннель больше не нужен: адаптер должен принадлежать службе.
@@ -175,9 +304,10 @@ func (a *guiApp) State() (string, error) {
 
 		raw, err := json.Marshal(resp.State)
 		if err != nil {
-			return "", err
+			return guiState{}
 		}
-		return string(raw), nil
+		_ = raw
+		return *resp.State
 	}
 
 	cfg, _ := loadConfig()
@@ -231,11 +361,7 @@ func (a *guiApp) State() (string, error) {
 		sort.Slice(state.Peers, func(i, j int) bool { return state.Peers[i].Index < state.Peers[j].Index })
 	}
 
-	raw, err := json.Marshal(state)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
+	return state
 }
 
 // Action выполняет команду из интерфейса. Ошибки возвращаются в JSON,
@@ -271,8 +397,13 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 	case "settings":
 		_, err = a.applySettings(req)
 	case "quit":
+		a.disconnect()
+		if a.tray != nil {
+			a.tray.AllowClose()
+			a.tray.Remove()
+		}
 		if a.w != nil {
-			a.w.Terminate()
+			a.w.Dispatch(func() { a.w.Terminate() })
 		}
 	default:
 		err = fmt.Errorf("неизвестное действие %q", name)

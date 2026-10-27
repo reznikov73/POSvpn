@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,14 +18,16 @@ import (
 	"golang.org/x/sys/windows"
 
 	"posvpn-engine/console"
+	"posvpn-engine/tray"
 )
 
 //go:embed ui/index.html
 var serverHTML string
 
 type serverGUI struct {
-	app *serverApp
-	w   webview2.WebView
+	app  *serverApp
+	w    webview2.WebView
+	tray *tray.Tray
 }
 
 type settingsRequest struct {
@@ -51,7 +54,7 @@ type srvState struct {
 }
 
 // runServerGUI открывает окно сервера; при закрытии окна сервер останавливается.
-func runServerGUI(app *serverApp) error {
+func runServerGUI(app *serverApp, minimized bool) error {
 	console.HideWindow()
 
 	dataPath := filepath.Join(os.Getenv("LOCALAPPDATA"), "POSvpn", "webview2-server")
@@ -91,10 +94,86 @@ func runServerGUI(app *serverApp) error {
 	}
 
 	serverDarkTitleBar(w)
+
+	trayIcon, trayErr := tray.Start(tray.Options{
+		Title:  "POSvpn Server",
+		IconID: 1,
+		Items: []tray.Item{
+			{ID: 1, Title: "Открыть"},
+			{ID: 2, Title: "Остановить сервер"},
+			{ID: 0, Separator: true},
+			{ID: 3, Title: "Выход"},
+		},
+		OnShow: func() {
+			if gui.tray != nil {
+				gui.tray.ShowWindow()
+			}
+		},
+		OnSelect: gui.trayAction,
+	})
+	if trayErr != nil {
+		log.Printf("трей: %v", trayErr)
+	} else {
+		gui.tray = trayIcon
+		if err := trayIcon.HookClose(windows.HWND(uintptr(w.Window())), func() { trayIcon.HideWindow() }); err != nil {
+			log.Printf("трей: перехват закрытия окна: %v", err)
+		}
+		if minimized {
+			trayIcon.HideWindow()
+		}
+	}
+
 	w.Run()
 
 	app.Stop()
+	if gui.tray != nil {
+		gui.tray.Remove()
+	}
 	return nil
+}
+
+// trayAction — команды меню иконки.
+func (g *serverGUI) trayAction(id uint32) {
+	switch id {
+	case 1:
+		if g.tray != nil {
+			g.tray.ShowWindow()
+		}
+	case 2:
+		if g.app.Running() {
+			g.app.Stop()
+		} else {
+			_ = g.app.Start()
+		}
+	case 3:
+		g.app.Stop()
+		if g.tray != nil {
+			g.tray.AllowClose()
+			g.tray.Remove()
+		}
+		if g.w != nil {
+			g.w.Dispatch(func() { g.w.Terminate() })
+		}
+	}
+}
+
+func (g *serverGUI) updateTray(running bool) {
+	if g.tray == nil {
+		return
+	}
+	tip := "POSvpn Server · остановлен"
+	toggle := "Запустить сервер"
+	if running {
+		tip = "POSvpn Server · работает"
+		toggle = "Остановить сервер"
+	}
+	g.tray.SetTooltip(tip)
+	g.tray.SetItems([]tray.Item{
+		{ID: 1, Title: "Открыть"},
+		{ID: 2, Title: toggle},
+		{ID: 0, Separator: true},
+		{ID: 3, Title: "Выход"},
+	})
 }
 
 // State отдаёт окну состояние сервера.
@@ -127,6 +206,7 @@ func (g *serverGUI) State() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	g.updateTray(state.Running)
 	return string(raw), nil
 }
 
@@ -154,8 +234,12 @@ func (g *serverGUI) Action(name, payload string) (string, error) {
 		})
 	case "quit":
 		g.app.Stop()
+		if g.tray != nil {
+			g.tray.AllowClose()
+			g.tray.Remove()
+		}
 		if g.w != nil {
-			g.w.Terminate()
+			g.w.Dispatch(func() { g.w.Terminate() })
 		}
 	case "open_logs":
 		err = exec.Command("explorer.exe", "/select,", g.app.logPath).Start()

@@ -62,7 +62,7 @@ func main() {
 				return
 			}
 		}
-		if err := runGUI(false); err != nil {
+		if err := runGUI(false, false); err != nil {
 			fmt.Fprintln(os.Stderr, "окно недоступно:", err)
 			runWizard()
 		}
@@ -85,15 +85,21 @@ func main() {
 			}
 		}
 		autoConnect := false
+		minimized := false
 		for _, arg := range os.Args[2:] {
-			if arg == "-connect" {
+			switch arg {
+			case "-connect":
 				autoConnect = true
+			case "-minimized":
+				minimized = true
 			}
 		}
-		err = runGUI(autoConnect)
+		err = runGUI(autoConnect, minimized)
 	case "wizard":
 		runWizard()
 		return
+	case "-minimized":
+		err = runGUI(false, true)
 	case "service":
 		err = serviceCommand(os.Args[2:])
 	case "up":

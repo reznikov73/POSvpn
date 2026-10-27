@@ -238,6 +238,7 @@ func main() {
 	keyFile := flag.String("tls-key", "", "ключ TLS")
 	guiFlag := flag.Bool("gui", defaultGUIFlag(), "открыть окно сервера (Windows)")
 	consoleFlag := flag.Bool("console", false, "работать без окна: служба, VPS, отладка")
+	minimized := flag.Bool("minimized", false, "запустить свёрнутым в трей")
 	flag.Parse()
 
 	resolvedStore := resolveStorePath(*storePath)
@@ -275,7 +276,7 @@ func main() {
 	}
 
 	if *guiFlag && !*consoleFlag {
-		if err := runServerGUI(app); err != nil {
+		if err := runServerGUI(app, *minimized); err != nil {
 			log.Printf("окно сервера: %v — работаем без окна", err)
 			waitForSignal()
 		}

@@ -44,6 +44,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "autostart"; Description: "Запускать POSvpn при входе в Windows (свёрнутым в трей)"; GroupDescription: "Автозапуск"; Flags: checkedonce
 
 [Components]
 Name: "client"; Description: "Клиент POSvpn — создание сети и вход по имени и паролю"; Types: full
@@ -60,6 +61,10 @@ Name: "{group}\POSvpn Client"; Filename: "{app}\posvpn-client.exe"; Components: 
 Name: "{group}\POSvpn Server"; Filename: "{app}\posvpn-server.exe"; Components: server
 Name: "{group}\{cm:UninstallProgram,POSvpn}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\POSvpn Client"; Filename: "{app}\posvpn-client.exe"; Components: client; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "POSvpn"; ValueData: """{app}\posvpn-client.exe"" -minimized"; Flags: uninsdeletevalue; Tasks: autostart; Components: client
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "POSvpnServer"; ValueData: """{app}\posvpn-server.exe"" -minimized"; Flags: uninsdeletevalue; Tasks: autostart; Components: server
 
 [Run]
 ; Служба владеет адаптером и туннелем: окно после установки работает без прав администратора.
