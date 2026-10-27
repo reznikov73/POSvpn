@@ -474,6 +474,7 @@
        без аккаунта и настройки роутера.</p>
     <p class="mono">Трафик: X25519 + ChaCha20-Poly1305<br>Транспорт: QUIC, свой кадр<br>Адресация: 10.77.0.0/16</p>
     <p class="mono" id="aboutState"></p>
+    <p class="mono" id="aboutLog"></p>
     <div class="row">
       <button class="btn primary" id="aboutClose" type="button">Закрыть</button>
     </div>
@@ -616,6 +617,7 @@
 
     setText('aboutState', 'Узлов в сети: ' + (peers.length + (s.configured ? 1 : 0)) +
       ' · индекс: ' + (s.self_index || '—'));
+    setText('aboutLog', s.log_path ? 'Журнал: ' + s.log_path : '');
   }
 
   function quality(p) {

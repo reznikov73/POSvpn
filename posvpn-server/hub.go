@@ -9,12 +9,11 @@ import (
 	"posvpn-engine/tunnel"
 )
 
-// StartHub поднимает QUIC-хаб: он принимает кадры от узлов и пересылает их
-// по числовому индексу в пределах сети. Содержимое кадров хаб не читает.
-func StartHub(store *Store, addr string) (*tunnel.Hub, error) {
+// StartHub поднимает QUIC-хаб и возвращает его отпечаток сертификата.
+func StartHub(store *Store, addr string) (*tunnel.Hub, string, error) {
 	cert, err := tunnel.SelfSignedCertificate()
 	if err != nil {
-		return nil, fmt.Errorf("сертификат хаба: %w", err)
+		return nil, "", fmt.Errorf("сертификат хаба: %w", err)
 	}
 
 	hub, err := tunnel.Listen(tunnel.HubConfig{
@@ -39,10 +38,11 @@ func StartHub(store *Store, addr string) (*tunnel.Hub, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
+	fingerprint := tunnel.Fingerprint(cert.Certificate[0])
 	log.Printf("хаб слушает %s (QUIC, ALPN %s)", hub.Addr(), tunnel.ALPN)
-	log.Printf("отпечаток сертификата хаба: %s", tunnel.Fingerprint(cert.Certificate[0]))
-	return hub, nil
+	log.Printf("отпечаток сертификата хаба: %s", fingerprint)
+	return hub, fingerprint, nil
 }

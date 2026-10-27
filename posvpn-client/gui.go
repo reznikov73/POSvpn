@@ -20,6 +20,7 @@ import (
 	"github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 
+	"posvpn-engine/console"
 	"posvpn-engine/tunnel"
 )
 
@@ -50,6 +51,7 @@ type guiState struct {
 	Error      string    `json:"error"`
 	HasWintun  bool      `json:"has_wintun"`
 	Elevated   bool      `json:"elevated"`
+	LogPath    string    `json:"log_path"`
 	Peers      []guiPeer `json:"peers"`
 }
 
@@ -83,7 +85,7 @@ func guiLog(format string, args ...any) {
 // runGUI открывает окно. Возвращает ошибку, если WebView2 недоступен.
 // autoConnect сразу поднимает туннель — удобно для автозапуска.
 func runGUI(autoConnect bool) error {
-	hideConsole()
+	console.HideWindow()
 
 	dataPath := filepath.Join(os.Getenv("LOCALAPPDATA"), "POSvpn", "webview2")
 	_ = os.MkdirAll(dataPath, 0o700)
@@ -140,6 +142,7 @@ func (a *guiApp) State() (string, error) {
 	state := guiState{
 		HasWintun: hasWintun(),
 		Elevated:  isElevated(),
+		LogPath:   logPath,
 		Peers:     []guiPeer{},
 	}
 	if cfg != nil {
@@ -382,16 +385,4 @@ func (a *guiApp) darkTitleBar() {
 	}
 }
 
-// hideConsole прячет консольное окно, когда клиент запущен как GUI.
-func hideConsole() {
-	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
-	getConsole := kernel32.NewProc("GetConsoleWindow")
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	showWindow := user32.NewProc("ShowWindow")
-
-	hwnd, _, _ := getConsole.Call()
-	if hwnd != 0 {
-		const swHide = 0
-		_, _, _ = showWindow.Call(hwnd, swHide)
-	}
-}
+// hideConsole больше не нужен: используется console.HideWindow.

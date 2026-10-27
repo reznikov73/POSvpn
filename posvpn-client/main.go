@@ -21,7 +21,11 @@ import (
 
 	"posvpn-engine"
 	"posvpn-engine/console"
+	"posvpn-engine/logx"
 )
+
+// logPath — файл журнала клиента, показывается в окне.
+var logPath string
 
 const defaultServer = "http://127.0.0.1:8787"
 
@@ -43,8 +47,16 @@ type config struct {
 
 func main() {
 	console.UTF8()
+	if path, err := logx.Setup("client"); err == nil {
+		logPath = path
+	}
 	if len(os.Args) < 2 {
-		// Без аргументов — окно. Если WebView2 нет, остаётся консольный мастер.
+		// Без аргументов — окно. Если прав мало, exe сам перезапустится через UAC.
+		if !isElevated() {
+			if err := relaunchElevated([]string{"gui"}); err == nil {
+				return
+			}
+		}
 		if err := runGUI(false); err != nil {
 			fmt.Fprintln(os.Stderr, "окно недоступно:", err)
 			runWizard()
@@ -61,6 +73,12 @@ func main() {
 	case "status", "peers":
 		err = runStatus(os.Args[2:])
 	case "gui":
+		if !isElevated() {
+			relaunchArgs := append([]string{"gui"}, os.Args[2:]...)
+			if err := relaunchElevated(relaunchArgs); err == nil {
+				return
+			}
+		}
 		autoConnect := false
 		for _, arg := range os.Args[2:] {
 			if arg == "-connect" {

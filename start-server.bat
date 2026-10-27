@@ -9,16 +9,7 @@ if not exist "out\posvpn-server.exe" (
     exit /b 1
 )
 
-echo Starting POSvpn server...
-echo   control: http://0.0.0.0:8787
-echo   hub:     quic://0.0.0.0:8788
-echo   state:   %CD%\server.json
-echo.
-echo Keep this window open. Ctrl+C stops the server.
-echo.
-
-out\posvpn-server.exe -listen 0.0.0.0:8787 -hub 0.0.0.0:8788 -store server.json %*
-
-echo.
-echo Server stopped.
-pause
+rem Server window: status, networks, nodes, hub counters.
+rem The server keeps running while the window is open; closing it stops the server.
+start "" "out\posvpn-server.exe" -gui -listen 0.0.0.0:8787 -hub 0.0.0.0:8788 -store server.json %*
+exit /b

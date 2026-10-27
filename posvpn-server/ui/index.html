@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>POSvpn Server</title>
+<style>
+  :root {
+    --bg: #10141b;
+    --panel: #1a202a;
+    --line: #2b3546;
+    --text: #e7eef7;
+    --muted: #8b98ab;
+    --accent: #35b4e8;
+    --green: #43c07b;
+    --yellow: #e0b341;
+    --red: #e35d5d;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.35 "Segoe UI", Tahoma, sans-serif;
+    user-select: none;
+    overflow: hidden;
+  }
+  .app { height: 100vh; display: flex; flex-direction: column; }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px 10px;
+  }
+  .logo { width: 26px; height: 30px; flex: none; }
+  .brand { font-size: 15px; letter-spacing: 2.4px; font-weight: 600; }
+  .brand span { color: var(--accent); }
+  .tag {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+
+  main { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  main::-webkit-scrollbar { width: 8px; }
+  main::-webkit-scrollbar-thumb { background: #2f3a4b; border-radius: 8px; }
+
+  .card {
+    padding: 14px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #202937, #1a222d);
+    border: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+  .status { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px rgba(67,192,123,.6); }
+  .status .title { font-size: 17px; font-weight: 600; }
+  .status .uptime { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  .kv { display: grid; grid-template-columns: 84px 1fr; gap: 4px 10px; font-size: 12.5px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { color: #cdd9e8; word-break: break-all; }
+  .mono { font-family: Consolas, "Courier New", monospace; font-size: 11.5px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 10px;
+  }
+  .stat .num { font-size: 18px; font-weight: 600; }
+  .stat .cap { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  .net {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .net-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: linear-gradient(180deg, #2a3a4f, #22303f);
+  }
+  .net-head .name { font-weight: 600; }
+  .net-head .subnet { color: #a9bdd2; font-size: 11.5px; font-family: Consolas, monospace; }
+  .net-head .count { margin-left: auto; font-size: 12px; color: #a9bdd2; }
+  .net .closed { font-size: 10px; color: var(--yellow); margin-left: 8px; }
+
+  .node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+  .node + .node { border-top: 1px solid rgba(43,53,70,.55); }
+  .node .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .node .ip { font-family: Consolas, monospace; font-size: 12px; color: #a9bdd2; }
+  .node .idx { width: 28px; text-align: right; color: var(--muted); font-size: 11px; }
+  .node.off .nm, .node.off .ip { color: #5f6d80; }
+  .node .role { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  .dot-sm { width: 7px; height: 7px; border-radius: 50%; background: #3a4658; flex: none; }
+  .dot-sm.on { background: var(--green); }
+
+  .empty { padding: 18px 12px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 9px 16px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  footer .paths { flex: 1; min-width: 0; overflow: hidden; }
+  footer .paths div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button.btn {
+    padding: 7px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: #263140;
+    color: var(--text);
+    font: 12px "Segoe UI", sans-serif;
+    cursor: pointer;
+  }
+  button.btn:hover { background: #2d3a4c; }
+  button.btn.warn { border-color: rgba(227,93,93,.5); color: #ffb3b3; }
+  #error { color: #ff9d9d; display: none; margin-top: 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <svg class="logo" viewBox="0 0 28 32" aria-hidden="true">
+      <path d="M14 1 26 5v10c0 7.6-5 12.9-12 16C7 27.9 2 22.6 2 15V5L14 1z"
+            fill="#1f7fae" stroke="#35b4e8" stroke-width="1.4"/>
+      <path d="M14 6 22 8.8v6.4c0 5-3.2 8.7-8 11-4.8-2.3-8-6-8-11V8.8L14 6z"
+            fill="#12303f"/>
+      <text x="14" y="20" text-anchor="middle" font-size="10" font-weight="700"
+            fill="#7fd8ff" font-family="Segoe UI, sans-serif">S</text>
+    </svg>
+    <div class="brand">POS<span>VPN</span></div>
+    <div class="tag">сервер</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="status">
+        <div class="dot"></div>
+        <div class="title">Работает</div>
+        <div class="uptime" id="uptime"></div>
+      </div>
+      <div class="kv">
+        <div class="k">Контроль</div><div class="v mono" id="listen">—</div>
+        <div class="k">Хаб</div><div class="v mono" id="hub">—</div>
+        <div class="k">Отпечаток</div><div class="v mono" id="fingerprint">—</div>
+        <div class="k">Узлов</div><div class="v" id="nodes">0</div>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><div class="num" id="received">0</div><div class="cap">принято</div></div>
+      <div class="stat"><div class="num" id="forwarded">0</div><div class="cap">переслано</div></div>
+      <div class="stat"><div class="num" id="broadcast">0</div><div class="cap">бродкаст</div></div>
+      <div class="stat"><div class="num" id="dropped">0</div><div class="cap">отброшено</div></div>
+    </section>
+
+    <div id="networks"></div>
+    <div id="error"></div>
+  </main>
+
+  <footer>
+    <div class="paths">
+      <div id="storePath" title="">состояние: —</div>
+      <div id="logPath" title="">журнал: —</div>
+    </div>
+    <button class="btn" id="openLogs" type="button">Журнал</button>
+    <button class="btn warn" id="quit" type="button">Выход</button>
+  </footer>
+</div>
+
+<script>
+  function $(id) { return document.getElementById(id); }
+  function setText(id, value) { var el = $(id); if (el && el.textContent !== value) el.textContent = value; }
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  async function refresh() {
+    try {
+      var state = JSON.parse(await window.serverState());
+      render(state);
+    } catch (e) {
+      var err = $('error');
+      err.textContent = 'Окно инициализируется…';
+      err.style.display = 'block';
+    }
+  }
+
+  async function act(name) {
+    try {
+      var res = JSON.parse(await window.serverAction(name));
+      if (!res.ok) {
+        var err = $('error');
+        err.textContent = res.error || 'Ошибка';
+        err.style.display = 'block';
+      }
+    } catch (e) {}
+  }
+
+  function render(s) {
+    setText('uptime', s.uptime ? 'работает ' + s.uptime : '');
+    setText('listen', s.listen || '—');
+    setText('hub', s.hub || 'выключен');
+    setText('fingerprint', s.fingerprint || '—');
+    setText('nodes', String(s.nodes || 0));
+
+    setText('received', String(s.received || 0));
+    setText('forwarded', String(s.forwarded || 0));
+    setText('broadcast', String(s.broadcast || 0));
+    setText('dropped', String(s.dropped || 0));
+
+    var storePath = $('storePath');
+    storePath.textContent = 'состояние: ' + (s.store || '—');
+    storePath.title = s.store || '';
+    var logPath = $('logPath');
+    logPath.textContent = 'журнал: ' + (s.log || '—');
+    logPath.title = s.log || '';
+
+    var box = $('networks');
+    var networks = s.networks || [];
+    if (!networks.length) {
+      box.innerHTML = '<div class="empty">Сетей пока нет. Создайте сеть из клиента.</div>';
+      return;
+    }
+
+    var html = '';
+    networks.forEach(function (net) {
+      html += '<div class="net"><div class="net-head">' +
+        '<span class="name">' + esc(net.name) + '</span>' +
+        '<span class="subnet">' + esc(net.subnet || '') + '</span>' +
+        (net.closed ? '<span class="closed">закрыта</span>' : '') +
+        '<span class="count">' + (net.nodes || []).length + ' узл.</span>' +
+        '</div>';
+      (net.nodes || []).forEach(function (node) {
+        html += '<div class="node ' + (node.online ? '' : 'off') + '">' +
+          '<span class="dot-sm ' + (node.online ? 'on' : '') + '"></span>' +
+          '<span class="nm">' + esc(node.name) + '</span>' +
+          '<span class="role">' + esc(node.role || '') + '</span>' +
+          '<span class="ip">' + esc(node.ip) + '</span>' +
+          '<span class="idx">' + (node.index || '') + '</span>' +
+          '</div>';
+      });
+      html += '</div>';
+    });
+    box.innerHTML = html;
+  }
+
+  $('openLogs').addEventListener('click', function () { act('open_logs'); });
+  $('quit').addEventListener('click', function () {
+    if (confirm('Остановить сервер? Все клиенты потеряют связь с хабом.')) act('quit');
+  });
+
+  refresh();
+  setInterval(refresh, 1000);
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -361,6 +362,52 @@ func (s *Store) NetMapFor(node engine.Node) (engine.NetMap, error) {
 		})
 	}
 	return netmap, nil
+}
+
+// NetworkView — снимок сети для окна сервера.
+type NetworkView struct {
+	Name   string     `json:"name"`
+	Subnet string     `json:"subnet"`
+	Closed bool       `json:"closed"`
+	Nodes  []NodeView `json:"nodes"`
+}
+
+// NodeView — снимок узла для окна сервера.
+type NodeView struct {
+	Name    string `json:"name"`
+	IP      string `json:"ip"`
+	Index   uint32 `json:"index"`
+	Role    string `json:"role"`
+	Online  bool   `json:"online"`
+	Blocked bool   `json:"blocked"`
+}
+
+// Snapshot отдаёт сети и узлы для окна сервера.
+func (s *Store) Snapshot(now time.Time) []NetworkView {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]NetworkView, 0, len(s.st.Networks))
+	for _, net := range s.st.Networks {
+		view := NetworkView{Name: net.Name, Subnet: net.Subnet, Closed: net.Closed}
+		for _, node := range s.st.Nodes {
+			if node.NetworkID != net.ID {
+				continue
+			}
+			view.Nodes = append(view.Nodes, NodeView{
+				Name:    node.Name,
+				IP:      node.IP,
+				Index:   node.Index,
+				Role:    node.Role,
+				Online:  now.Sub(node.LastSeen) < engine.OnlineWindow,
+				Blocked: node.Blocked,
+			})
+		}
+		sort.Slice(view.Nodes, func(i, j int) bool { return view.Nodes[i].Index < view.Nodes[j].Index })
+		out = append(out, view)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // Version возвращает текущую версию карты сети.
