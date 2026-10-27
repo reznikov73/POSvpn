@@ -98,6 +98,7 @@ func runGUI(autoConnect bool) error {
 			Title:  "POSvpn",
 			Width:  440,
 			Height: 700,
+			IconId: 1,
 			Center: true,
 		},
 	})

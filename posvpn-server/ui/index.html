@@ -55,10 +55,26 @@
     border: 1px solid var(--line);
     margin-bottom: 12px;
   }
-  .status { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px rgba(67,192,123,.6); }
+  .status { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .power {
+    width: 68px; height: 68px; flex: none; border-radius: 50%;
+    border: 2px solid #3b475a;
+    background: radial-gradient(circle at 50% 35%, #2a3342, #1a222d 70%);
+    color: #6c7c90; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px; cursor: pointer;
+    transition: .15s;
+  }
+  .power:hover { border-color: #4a5a72; }
+  .power.on {
+    border-color: var(--green); color: #d9ffe9;
+    background: radial-gradient(circle at 50% 35%, #2c6b47, #173222 72%);
+    box-shadow: 0 0 20px rgba(67,192,123,.35), inset 0 0 16px rgba(67,192,123,.2);
+  }
+  .power .glyph { width: 24px; height: 24px; display: block; }
+  .power .word { font-size: 10px; letter-spacing: 2px; }
+  .status .info { min-width: 0; }
   .status .title { font-size: 17px; font-weight: 600; }
-  .status .uptime { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .status .uptime { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
   .kv { display: grid; grid-template-columns: 84px 1fr; gap: 4px 10px; font-size: 12.5px; }
   .kv .k { color: var(--muted); }
@@ -160,9 +176,17 @@
   <main>
     <section class="card">
       <div class="status">
-        <div class="dot"></div>
-        <div class="title">Работает</div>
-        <div class="uptime" id="uptime"></div>
+        <div class="power on" id="power">
+          <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3.2v8.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M6.4 6.6a8 8 0 1 0 11.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+          <div class="word" id="powerWord">ON</div>
+        </div>
+        <div class="info">
+          <div class="title" id="stateTitle">Работает</div>
+          <div class="uptime" id="uptime"></div>
+        </div>
       </div>
       <div class="kv">
         <div class="k">Контроль</div><div class="v mono" id="listen">—</div>
@@ -194,6 +218,8 @@
 </div>
 
 <script>
+  var STATE = null;
+
   function $(id) { return document.getElementById(id); }
   function setText(id, value) { var el = $(id); if (el && el.textContent !== value) el.textContent = value; }
   function esc(text) {
@@ -204,6 +230,7 @@
   async function refresh() {
     try {
       var state = JSON.parse(await window.serverState());
+      STATE = state;
       render(state);
     } catch (e) {
       var err = $('error');
@@ -224,7 +251,12 @@
   }
 
   function render(s) {
-    setText('uptime', s.uptime ? 'работает ' + s.uptime : '');
+    var running = !!s.running;
+    var power = $('power');
+    power.classList.toggle('on', running);
+    setText('powerWord', running ? 'ON' : 'OFF');
+    setText('stateTitle', running ? 'Работает' : 'Остановлен');
+    setText('uptime', running && s.uptime ? 'работает ' + s.uptime : 'нажмите кнопку, чтобы запустить');
     setText('listen', s.listen || '—');
     setText('hub', s.hub || 'выключен');
     setText('fingerprint', s.fingerprint || '—');
@@ -272,6 +304,14 @@
   }
 
   $('openLogs').addEventListener('click', function () { act('open_logs'); });
+  $('power').addEventListener('click', function () {
+    if (!STATE) return;
+    if (STATE.running) {
+      if (confirm('Остановить сервер? Клиенты потеряют связь с хабом.')) act('stop');
+    } else {
+      act('start');
+    }
+  });
   $('quit').addEventListener('click', function () {
     if (confirm('Остановить сервер? Все клиенты потеряют связь с хабом.')) act('quit');
   });

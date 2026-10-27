@@ -28,6 +28,7 @@ type serverGUI struct {
 }
 
 type srvState struct {
+	Running     bool          `json:"running"`
 	Listen      string        `json:"listen"`
 	Hub         string        `json:"hub"`
 	Fingerprint string        `json:"fingerprint"`
@@ -57,6 +58,7 @@ func runServerGUI(app *serverApp) error {
 			Title:  "POSvpn Server",
 			Width:  520,
 			Height: 680,
+			IconId: 1,
 			Center: true,
 		},
 	})
@@ -77,26 +79,28 @@ func runServerGUI(app *serverApp) error {
 	serverDarkTitleBar(w)
 	w.Run()
 
-	app.shutdown()
+	app.Stop()
 	return nil
 }
 
 // State отдаёт окну состояние сервера.
 func (g *serverGUI) State() (string, error) {
 	state := srvState{
+		Running:     g.app.Running(),
 		Listen:      g.app.listen,
 		Hub:         g.app.hubAddr,
 		Fingerprint: g.app.fingerprint,
-		Uptime:      time.Since(g.app.started).Round(time.Second).String(),
 		Store:       g.app.storePath,
 		Log:         g.app.logPath,
 		Networks:    g.app.store.Snapshot(time.Now()),
 	}
+	if state.Running {
+		state.Uptime = time.Since(g.app.StartedAt()).Round(time.Second).String()
+	}
 	for _, network := range state.Networks {
 		state.Nodes += len(network.Nodes)
 	}
-	if g.app.hub != nil {
-		stats := g.app.hub.Stats()
+	if stats, ok := g.app.Stats(); ok {
 		state.Received = stats.Received
 		state.Forwarded = stats.Forwarded
 		state.Broadcast = stats.Broadcast
@@ -114,8 +118,12 @@ func (g *serverGUI) State() (string, error) {
 func (g *serverGUI) Action(name string) (string, error) {
 	var err error
 	switch name {
+	case "start":
+		err = g.app.Start()
+	case "stop":
+		g.app.Stop()
 	case "quit":
-		g.app.shutdown()
+		g.app.Stop()
 		if g.w != nil {
 			g.w.Terminate()
 		}

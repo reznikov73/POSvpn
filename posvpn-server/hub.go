@@ -1,21 +1,16 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
-	"fmt"
 	"log"
 
 	"posvpn-engine"
 	"posvpn-engine/tunnel"
 )
 
-// StartHub поднимает QUIC-хаб и возвращает его отпечаток сертификата.
-func StartHub(store *Store, addr string) (*tunnel.Hub, string, error) {
-	cert, err := tunnel.SelfSignedCertificate()
-	if err != nil {
-		return nil, "", fmt.Errorf("сертификат хаба: %w", err)
-	}
-
+// StartHub поднимает QUIC-хаб на готовом сертификате.
+func StartHub(store *Store, addr string, cert tls.Certificate) (*tunnel.Hub, error) {
 	hub, err := tunnel.Listen(tunnel.HubConfig{
 		Addr:      addr,
 		TLSConfig: tunnel.ServerTLSConfig(cert),
@@ -38,11 +33,9 @@ func StartHub(store *Store, addr string) (*tunnel.Hub, string, error) {
 		},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	fingerprint := tunnel.Fingerprint(cert.Certificate[0])
 	log.Printf("хаб слушает %s (QUIC, ALPN %s)", hub.Addr(), tunnel.ALPN)
-	log.Printf("отпечаток сертификата хаба: %s", fingerprint)
-	return hub, fingerprint, nil
+	return hub, nil
 }

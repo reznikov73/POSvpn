@@ -4,9 +4,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,32 +22,131 @@ import (
 	"posvpn-engine/tunnel"
 )
 
-// serverApp — состояние процесса: его показывает окно и по нему же
-// выполняется корректная остановка.
+// serverApp — процесс сервера. Его можно останавливать и снова запускать
+// из окна, не закрывая программу.
 type serverApp struct {
 	store       *Store
-	hub         *tunnel.Hub
-	http        *http.Server
-	listen      string
-	hubAddr     string
+	cert        tls.Certificate
 	fingerprint string
-	storePath   string
-	logPath     string
-	started     time.Time
-	stopOnce    sync.Once
+
+	listen    string
+	hubAddr   string
+	storePath string
+	logPath   string
+	certFile  string
+	keyFile   string
+
+	mu        sync.Mutex
+	running   bool
+	hub       *tunnel.Hub
+	http      *http.Server
+	startedAt time.Time
 }
 
-func (a *serverApp) shutdown() {
-	a.stopOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := a.http.Shutdown(ctx); err != nil {
+// Start поднимает HTTP-сервер и хаб. Повторный вызов при работающем сервере
+// ничего не делает.
+func (a *serverApp) Start() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.running {
+		return nil
+	}
+
+	handler := NewServer(a.store)
+	srv := &http.Server{
+		Addr:              a.listen,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	listener, err := net.Listen("tcp", a.listen)
+	if err != nil {
+		return fmt.Errorf("порт %s: %w", a.listen, err)
+	}
+
+	var hub *tunnel.Hub
+	if a.hubAddr != "" {
+		hub, err = StartHub(a.store, a.hubAddr, a.cert)
+		if err != nil {
+			_ = listener.Close()
+			return err
+		}
+	}
+
+	a.http = srv
+	a.hub = hub
+	a.running = true
+	a.startedAt = time.Now()
+
+	go func() {
+		var serveErr error
+		if a.certFile != "" && a.keyFile != "" {
+			log.Printf("POSvpn coordinator слушает https://%s", a.listen)
+			serveErr = srv.ServeTLS(listener, a.certFile, a.keyFile)
+		} else {
+			log.Printf("POSvpn coordinator слушает http://%s — ВНИМАНИЕ: без TLS, только для отладки", a.listen)
+			serveErr = srv.Serve(listener)
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.Printf("сервер остановлен из-за ошибки: %v", serveErr)
+			a.mu.Lock()
+			a.running = false
+			a.mu.Unlock()
+		}
+	}()
+
+	log.Printf("сервер запущен (control %s, хаб %s)", a.listen, a.hubAddr)
+	return nil
+}
+
+// Stop останавливает HTTP-сервер и хаб, освобождая порты.
+func (a *serverApp) Stop() {
+	a.mu.Lock()
+	if !a.running {
+		a.mu.Unlock()
+		return
+	}
+	srv, hub := a.http, a.hub
+	a.running = false
+	a.http = nil
+	a.hub = nil
+	a.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if srv != nil {
+		if err := srv.Shutdown(ctx); err != nil {
 			log.Printf("остановка HTTP: %v", err)
 		}
-		if a.hub != nil {
-			_ = a.hub.Close()
-		}
-	})
+	}
+	if hub != nil {
+		_ = hub.Close()
+	}
+	log.Printf("сервер остановлен")
+}
+
+func (a *serverApp) Running() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.running
+}
+
+func (a *serverApp) StartedAt() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.startedAt
+}
+
+func (a *serverApp) Stats() (tunnel.Stats, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.hub == nil {
+		return tunnel.Stats{}, false
+	}
+	return a.hub.Stats(), true
 }
 
 func main() {
@@ -64,49 +166,28 @@ func main() {
 		log.Fatalf("состояние не загружено: %v", err)
 	}
 
+	cert, err := tunnel.SelfSignedCertificate()
+	if err != nil {
+		log.Fatalf("сертификат хаба: %v", err)
+	}
+	fingerprint := tunnel.Fingerprint(cert.Certificate[0])
+
 	app := &serverApp{
-		store:     store,
-		listen:    *listen,
-		hubAddr:   *hubAddr,
-		storePath: *storePath,
-		logPath:   logPath,
-		started:   time.Now(),
+		store:       store,
+		cert:        cert,
+		fingerprint: fingerprint,
+		listen:      *listen,
+		hubAddr:     *hubAddr,
+		storePath:   *storePath,
+		logPath:     logPath,
+		certFile:    *certFile,
+		keyFile:     *keyFile,
 	}
 
-	if *hubAddr != "" {
-		hub, fingerprint, err := StartHub(store, *hubAddr)
-		if err != nil {
-			log.Fatalf("хаб не запущен: %v", err)
-		}
-		app.hub = hub
-		app.fingerprint = fingerprint
+	log.Printf("отпечаток сертификата хаба: %s", fingerprint)
+	if err := app.Start(); err != nil {
+		log.Fatalf("сервер не запущен: %v", err)
 	}
-
-	srv := &http.Server{
-		Addr:              *listen,
-		Handler:           NewServer(store),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-	app.http = srv
-
-	useTLS := *certFile != "" && *keyFile != ""
-
-	go func() {
-		var err error
-		if useTLS {
-			log.Printf("POSvpn coordinator слушает https://%s", *listen)
-			err = srv.ListenAndServeTLS(*certFile, *keyFile)
-		} else {
-			log.Printf("POSvpn coordinator слушает http://%s — ВНИМАНИЕ: без TLS, только для отладки", *listen)
-			err = srv.ListenAndServe()
-		}
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("сервер остановлен: %v", err)
-		}
-	}()
 
 	if *guiFlag {
 		if err := runServerGUI(app); err != nil {
@@ -118,7 +199,7 @@ func main() {
 	}
 
 	log.Println("останавливаемся…")
-	app.shutdown()
+	app.Stop()
 }
 
 func waitForSignal() {

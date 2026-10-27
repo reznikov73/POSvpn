@@ -35,7 +35,11 @@ func TestHubAcceptsOnlyKnownTokens(t *testing.T) {
 	log.SetOutput(io.Discard)
 	t.Cleanup(func() { log.SetOutput(oldOutput) })
 
-	hub, _, err := StartHub(store, "127.0.0.1:0")
+	cert, err := tunnel.SelfSignedCertificate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub, err := StartHub(store, "127.0.0.1:0", cert)
 	if err != nil {
 		t.Fatal(err)
 	}
