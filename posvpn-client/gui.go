@@ -21,6 +21,7 @@ import (
 	"github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 
+	"posvpn-engine/clipboard"
 	"posvpn-engine/console"
 	"posvpn-engine/tray"
 	"posvpn-engine/tunnel"
@@ -412,6 +413,14 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 		err = a.runServiceCommand(req.Command)
 	case "settings":
 		_, err = a.applySettings(req)
+	case "paste_clipboard":
+		text, readErr := clipboard.Read()
+		resp := map[string]any{"ok": readErr == nil, "text": text}
+		if readErr != nil {
+			resp["error"] = readErr.Error()
+		}
+		raw, _ := json.Marshal(resp)
+		return string(raw), nil
 	case "quit":
 		a.disconnect()
 		if a.tray != nil {

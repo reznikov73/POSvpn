@@ -17,6 +17,7 @@ import (
 	"github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 
+	"posvpn-engine/clipboard"
 	"posvpn-engine/console"
 	"posvpn-engine/tray"
 )
@@ -243,6 +244,8 @@ func (g *serverGUI) Action(name, payload string) (string, error) {
 			Hub:    g.app.HubAddr(),
 			TLS:    g.app.TLS(),
 		})
+	case "copy_fingerprint":
+		err = clipboard.Write(g.app.fingerprint)
 	case "quit":
 		g.app.Stop()
 		if g.tray != nil {

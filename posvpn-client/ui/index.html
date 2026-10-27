@@ -530,6 +530,7 @@
     <div class="field">
       <label for="setPin">Отпечаток сертификата хаба (пусто — не проверять)</label>
       <input id="setPin" placeholder="64 hex" autocomplete="off">
+      <button class="btn" id="pastePin" type="button" style="margin-top:6px;padding:7px 10px;font-size:12px">Вставить из буфера</button>
     </div>
 
     <div class="form-error" id="settingsError"></div>
@@ -772,6 +773,15 @@
   $('authCancel').addEventListener('click', closeModals);
   $('aboutClose').addEventListener('click', closeModals);
   $('settingsCancel').addEventListener('click', closeModals);
+  $('pastePin').addEventListener('click', async function () {
+    var res = await act('paste_clipboard', {});
+    if (res.ok && res.text) {
+      $('setPin').value = res.text.trim();
+    } else {
+      $('settingsError').textContent = res.error || 'Буфер обмена пуст';
+      $('settingsError').style.display = 'block';
+    }
+  });
 
   document.querySelectorAll('[data-service]').forEach(function (button) {
     button.addEventListener('click', async function () {
