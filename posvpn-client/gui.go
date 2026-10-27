@@ -38,26 +38,26 @@ type guiApp struct {
 }
 
 type guiState struct {
-	Configured bool      `json:"configured"`
-	Server     string    `json:"server"`
-	Hub        string    `json:"hub"`
-	HubPin     string    `json:"hub_pin"`
-	Network    string    `json:"network"`
-	SelfName   string    `json:"self_name"`
-	SelfIP     string    `json:"self_ip"`
-	SelfIndex  uint32    `json:"self_index"`
-	NodeID     string    `json:"node_id"`
-	ServiceInstalled bool `json:"service_installed"`
-	ServiceRunning   bool `json:"service_running"`
-	Running    bool      `json:"running"`
-	Connected  bool      `json:"connected"`
-	Starting   bool      `json:"starting"`
-	Error      string    `json:"error"`
-	HasWintun  bool      `json:"has_wintun"`
-	Elevated   bool      `json:"elevated"`
-	Service    bool      `json:"service"`
-	LogPath    string    `json:"log_path"`
-	Peers      []guiPeer `json:"peers"`
+	Configured       bool      `json:"configured"`
+	Server           string    `json:"server"`
+	Hub              string    `json:"hub"`
+	HubPin           string    `json:"hub_pin"`
+	Network          string    `json:"network"`
+	SelfName         string    `json:"self_name"`
+	SelfIP           string    `json:"self_ip"`
+	SelfIndex        uint32    `json:"self_index"`
+	NodeID           string    `json:"node_id"`
+	ServiceInstalled bool      `json:"service_installed"`
+	ServiceRunning   bool      `json:"service_running"`
+	Running          bool      `json:"running"`
+	Connected        bool      `json:"connected"`
+	Starting         bool      `json:"starting"`
+	Error            string    `json:"error"`
+	HasWintun        bool      `json:"has_wintun"`
+	Elevated         bool      `json:"elevated"`
+	Service          bool      `json:"service"`
+	LogPath          string    `json:"log_path"`
+	Peers            []guiPeer `json:"peers"`
 }
 
 type guiPeer struct {

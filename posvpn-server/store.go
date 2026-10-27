@@ -228,16 +228,43 @@ func (s *Store) AddNode(node engine.Node) (engine.Node, error) {
 
 	used := make(map[string]struct{})
 	count := 0
-	for _, existing := range s.st.Nodes {
+	nameIdx := -1
+	for i := range s.st.Nodes {
+		existing := s.st.Nodes[i]
 		if existing.NetworkID != node.NetworkID {
 			continue
 		}
 		count++
+		used[existing.IP] = struct{}{}
 		if equalFold(existing.Name, node.Name) {
+			nameIdx = i
+		}
+	}
+
+	// Тот же узел возвращается после перезапуска или падения: имя занято им же.
+	// Занять имя вышедшего из сети узла тоже можно — иначе после аварийного
+	// закрытия клиента войти под своим именем больше нельзя.
+	if nameIdx >= 0 {
+		old := s.st.Nodes[nameIdx]
+		sameKey := old.PublicKey != "" && old.PublicKey == node.PublicKey
+		offline := time.Since(old.LastSeen) >= engine.OnlineWindow
+		if !sameKey && !offline {
 			return engine.Node{}, ErrNodeNameTaken
 		}
-		used[existing.IP] = struct{}{}
+
+		node.IP = old.IP
+		node.Index = old.Index
+		if node.Role == "" {
+			node.Role = old.Role
+		}
+		s.st.Nodes[nameIdx] = node
+		s.bumpVersionLocked()
+		if err := s.saveLocked(); err != nil {
+			return engine.Node{}, err
+		}
+		return node, nil
 	}
+
 	if count >= maxNodesPerNetwork {
 		return engine.Node{}, ErrNetworkFull
 	}
