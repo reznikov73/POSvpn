@@ -35,6 +35,7 @@ type srvState struct {
 	Uptime      string        `json:"uptime"`
 	Store       string        `json:"store"`
 	Log         string        `json:"log"`
+	Error       string        `json:"error"`
 	Networks    []NetworkView `json:"networks"`
 	Nodes       int           `json:"nodes"`
 	Received    uint64        `json:"received"`
@@ -92,6 +93,7 @@ func (g *serverGUI) State() (string, error) {
 		Fingerprint: g.app.fingerprint,
 		Store:       g.app.storePath,
 		Log:         g.app.logPath,
+		Error:       g.app.StartupError(),
 		Networks:    g.app.store.Snapshot(time.Now()),
 	}
 	if state.Running {

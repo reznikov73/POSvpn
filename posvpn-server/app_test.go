@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +23,34 @@ func TestResolveStorePathFromOutDir(t *testing.T) {
 	got := resolveStorePathFor("server.json", filepath.Join(outDir, "posvpn-server.exe"))
 	if got != store {
 		t.Fatalf("получили %q, ждали %q", got, store)
+	}
+}
+
+func TestServerAppReportsBusyPort(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "server.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := tunnel.SelfSignedCertificate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+
+	app := &serverApp{store: store, cert: cert, listen: busy.Addr().String()}
+	if err := app.Start(); err == nil {
+		t.Fatal("занятый порт должен давать ошибку")
+	}
+	if app.StartupError() == "" {
+		t.Fatal("ошибка запуска должна сохраняться для окна")
+	}
+	if app.Running() {
+		t.Fatal("сервер не должен считаться работающим")
 	}
 }
 

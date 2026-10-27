@@ -219,6 +219,7 @@
 
 <script>
   var STATE = null;
+  var ACT_ERROR = false;
 
   function $(id) { return document.getElementById(id); }
   function setText(id, value) { var el = $(id); if (el && el.textContent !== value) el.textContent = value; }
@@ -242,6 +243,7 @@
   async function act(name) {
     try {
       var res = JSON.parse(await window.serverAction(name));
+      ACT_ERROR = !res.ok;
       if (!res.ok) {
         var err = $('error');
         err.textContent = res.error || 'Ошибка';
@@ -257,6 +259,15 @@
     setText('powerWord', running ? 'ON' : 'OFF');
     setText('stateTitle', running ? 'Работает' : 'Остановлен');
     setText('uptime', running && s.uptime ? 'работает ' + s.uptime : 'нажмите кнопку, чтобы запустить');
+
+    var errBox = $('error');
+    if (s.error) {
+      errBox.textContent = s.error;
+      errBox.style.display = 'block';
+    } else if (!ACT_ERROR) {
+      errBox.style.display = 'none';
+      errBox.textContent = '';
+    }
     setText('listen', s.listen || '—');
     setText('hub', s.hub || 'выключен');
     setText('fingerprint', s.fingerprint || '—');

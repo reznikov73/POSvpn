@@ -37,11 +37,12 @@ type serverApp struct {
 	certFile  string
 	keyFile   string
 
-	mu        sync.Mutex
-	running   bool
-	hub       *tunnel.Hub
-	http      *http.Server
-	startedAt time.Time
+	mu           sync.Mutex
+	running      bool
+	hub          *tunnel.Hub
+	http         *http.Server
+	startedAt    time.Time
+	startupError string
 }
 
 // Start поднимает HTTP-сервер и хаб. Повторный вызов при работающем сервере
@@ -65,7 +66,8 @@ func (a *serverApp) Start() error {
 
 	listener, err := net.Listen("tcp", a.listen)
 	if err != nil {
-		return fmt.Errorf("порт %s: %w", a.listen, err)
+		a.startupError = fmt.Sprintf("порт %s: %v", a.listen, err)
+		return fmt.Errorf("%s", a.startupError)
 	}
 
 	var hub *tunnel.Hub
@@ -73,6 +75,7 @@ func (a *serverApp) Start() error {
 		hub, err = StartHub(a.store, a.hubAddr, a.cert)
 		if err != nil {
 			_ = listener.Close()
+			a.startupError = err.Error()
 			return err
 		}
 	}
@@ -81,6 +84,7 @@ func (a *serverApp) Start() error {
 	a.hub = hub
 	a.running = true
 	a.startedAt = time.Now()
+	a.startupError = ""
 
 	go func() {
 		var serveErr error
@@ -141,6 +145,12 @@ func (a *serverApp) StartedAt() time.Time {
 	return a.startedAt
 }
 
+func (a *serverApp) StartupError() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.startupError
+}
+
 func (a *serverApp) Stats() (tunnel.Stats, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -189,7 +199,11 @@ func main() {
 
 	log.Printf("отпечаток сертификата хаба: %s", fingerprint)
 	if err := app.Start(); err != nil {
-		log.Fatalf("сервер не запущен: %v", err)
+		if *guiFlag && !*consoleFlag {
+			log.Printf("сервер не запущен: %v", err)
+		} else {
+			log.Fatalf("сервер не запущен: %v", err)
+		}
 	}
 
 	if *guiFlag && !*consoleFlag {
