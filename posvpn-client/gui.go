@@ -64,6 +64,13 @@ type guiState struct {
 	Service          bool      `json:"service"`
 	LogPath          string    `json:"log_path"`
 	Peers            []guiPeer `json:"peers"`
+
+	// Прокси: разрешён ли выход в интернет через этот узел и по какому адресу.
+	ProxyEnabled bool   `json:"proxy_enabled"`
+	ProxyPort    int    `json:"proxy_port"`
+	ProxyUser    string `json:"proxy_user"`
+	ProxyPass    string `json:"proxy_pass"`
+	ProxyAddr    string `json:"proxy_addr"`
 }
 
 type guiPeer struct {
@@ -83,6 +90,12 @@ type guiRequest struct {
 	Hub      string `json:"hub"`
 	Pin      string `json:"pin"`
 	Command  string `json:"command"`
+
+	ProxyEnabled bool   `json:"proxy_enabled"`
+	ProxyPort    int    `json:"proxy_port"`
+	ProxyUser    string `json:"proxy_user"`
+	ProxyPass    string `json:"proxy_pass"`
+	Text         string `json:"text"`
 }
 
 // guiLog пишет строку в тот же журнал, что и JS-ошибки.
@@ -345,6 +358,13 @@ func (a *guiApp) collectState() guiState {
 		state.SelfIP = cfg.IP
 		state.SelfIndex = cfg.Index
 		state.NodeID = cfg.NodeID
+		state.ProxyEnabled = cfg.ProxyEnabled
+		state.ProxyPort = cfg.ProxyPort
+		state.ProxyUser = cfg.ProxyUser
+		state.ProxyPass = cfg.ProxyPass
+		if cfg.ProxyEnabled {
+			state.ProxyAddr = proxyAddress(cfg.IP, cfg.ProxyPort)
+		}
 	}
 	state.ServiceInstalled, state.ServiceRunning = serviceStatusInfo()
 	if state.SelfName == "" {
@@ -425,6 +445,8 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 		}
 		raw, _ := json.Marshal(resp)
 		return string(raw), nil
+	case "copy_text":
+		err = clipboard.Write(req.Text)
 	case "quit":
 		a.disconnect()
 		if a.tray != nil {
@@ -525,6 +547,11 @@ func (a *guiApp) applySettings(req guiRequest) (bool, error) {
 		Server: req.Server,
 		Hub:    req.Hub,
 		Pin:    req.Pin,
+
+		ProxyEnabled: req.ProxyEnabled,
+		ProxyPort:    req.ProxyPort,
+		ProxyUser:    req.ProxyUser,
+		ProxyPass:    req.ProxyPass,
 	}); err == nil {
 		if !resp.OK {
 			if resp.Error == "" {
@@ -547,10 +574,25 @@ func (a *guiApp) applySettings(req guiRequest) (bool, error) {
 	}
 	cfg.Hub = strings.TrimSpace(req.Hub)
 	cfg.HubPin = strings.TrimSpace(req.Pin)
+	applyProxySettings(cfg, req)
 	if err := saveConfig(cfg); err != nil {
 		return false, err
 	}
 	return false, nil
+}
+
+// applyProxySettings переносит поля прокси из запроса в настройки.
+func applyProxySettings(cfg *config, req guiRequest) {
+	cfg.ProxyEnabled = req.ProxyEnabled
+	cfg.ProxyPort = req.ProxyPort
+	if cfg.ProxyPort <= 0 || cfg.ProxyPort > 65535 {
+		cfg.ProxyPort = defaultProxyPort
+	}
+	cfg.ProxyUser = strings.TrimSpace(req.ProxyUser)
+	cfg.ProxyPass = req.ProxyPass
+	if cfg.ProxyUser == "" {
+		cfg.ProxyPass = ""
+	}
 }
 
 func guiAuth(req guiRequest, create bool) error {
@@ -636,6 +678,11 @@ func (a *guiApp) connect() error {
 		MTU:        tunnel.DefaultMTU,
 		Adapter:    "POSvpn",
 		NetMap:     netmap,
+
+		ProxyEnabled: cfg.ProxyEnabled,
+		ProxyPort:    cfg.ProxyPort,
+		ProxyUser:    cfg.ProxyUser,
+		ProxyPass:    cfg.ProxyPass,
 	}
 
 	go func() {

@@ -30,6 +30,12 @@ type tunnelOptions struct {
 	MTU        int
 	Adapter    string
 	NetMap     engine.NetMap
+
+	// Прокси на этом узле: участники сети ходят в интернет через него.
+	ProxyEnabled bool
+	ProxyPort    int
+	ProxyUser    string
+	ProxyPass    string
 }
 
 // peerState — пир и его направленные шифры. Шифры переживают переподключение
@@ -272,6 +278,14 @@ func runTunnel(ctx context.Context, opt tunnelOptions) error {
 func runSession(ctx context.Context, opt tunnelOptions, device packetDevice, peers *peerSet, onState func(bool, error)) error {
 	var current atomic.Pointer[tunnel.Client]
 	errCh := make(chan error, 2)
+
+	// Прокси живёт столько же, сколько сеанс: включается вместе с туннелем,
+	// гаснет при отключении, смене настроек и выходе.
+	if proxy, err := startNodeProxy(opt); err != nil {
+		log.Printf("прокси не запущен: %v", err)
+	} else if proxy != nil {
+		defer func() { _ = proxy.Close() }()
+	}
 
 	go func() { errCh <- sendLoop(ctx, device, peers, &current, opt) }()
 	go heartbeatLoop(ctx, opt, peers)

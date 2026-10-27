@@ -390,13 +390,24 @@
   .inline input { flex: 1; }
   .check { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; font-size: 12.5px; }
   .check input { width: 15px; height: 15px; accent-color: var(--accent); }
-  .sheet.settings .section-title { margin: 10px 0 4px; }
+  .sheet.settings .section-title { margin: 6px 0 3px; }
   .sheet.settings .info-row { padding: 1px 0; font-size: 12px; }
   .sheet.settings .field { margin-bottom: 6px; }
   .sheet.settings .field label { margin-bottom: 2px; font-size: 10px; }
   .sheet.settings .field input { padding: 6px 8px; font-size: 12.5px; }
   .sheet.settings .hint { margin: 4px 0 0; font-size: 10.5px; line-height: 1.35; }
   .sheet.settings h2 { margin-bottom: 6px; }
+  .proxy-fields { display: none; margin-top: 4px; }
+  .proxy-fields.on { display: block; }
+  .proxy-addr {
+    display: flex; align-items: center; gap: 8px; margin-top: 2px;
+    padding: 6px 8px; border-radius: 7px; background: #16202c;
+    border: 1px solid #2a3a4b; font-family: Consolas, monospace; font-size: 12px;
+    color: #7fd8ff;
+  }
+  .proxy-addr span { flex: 1; }
+  .field.row3 { display: grid; grid-template-columns: 74px 1fr 1fr; gap: 6px; }
+  .field.row3 input { min-width: 0; }
 </style>
 </head>
 <body>
@@ -463,6 +474,7 @@
       <div id="modeLine">Режим: —</div>
       <div id="serverLine">Сервер: —</div>
       <div id="hubLine">Хаб: —</div>
+      <div id="proxyLine" style="display:none">Прокси: —</div>
     </div>
 
     <section class="net">
@@ -515,10 +527,8 @@
     <h2>Настройки</h2>
     <div class="sheet-body">
       <div class="section-title">Этот компьютер</div>
-      <div class="info-row"><span>Имя</span><b id="setName">—</b></div>
-      <div class="info-row"><span>ID узла</span><b id="setNodeID">—</b></div>
-      <div class="info-row"><span>Адрес</span><b id="setIP">—</b></div>
-      <div class="info-row"><span>Режим</span><b id="setMode">—</b></div>
+      <div class="info-row"><span>Имя и ID</span><b id="setName">—</b></div>
+      <div class="info-row"><span>Адрес и режим</span><b id="setIP">—</b></div>
 
       <div class="section-title">Служба</div>
       <div class="info-row"><span>Состояние</span><b id="setSvcState">—</b></div>
@@ -538,9 +548,6 @@
         <input id="setHub" placeholder="авто" autocomplete="off">
       </div>
       <label class="check"><input type="checkbox" id="setTls"> Подключаться по HTTPS</label>
-      <p class="hint">Для самоподписанного сертификата нужен отпечаток ниже.</p>
-
-      <div class="section-title">Безопасность</div>
       <div class="field">
         <label for="setPin">Отпечаток сертификата</label>
         <div class="inline">
@@ -548,6 +555,21 @@
           <button class="btn small" id="pastePin" type="button">Вставить</button>
         </div>
       </div>
+
+      <div class="section-title">Прокси</div>
+      <label class="check"><input type="checkbox" id="setProxyOn"> Выход в интернет через этот узел</label>
+      <div class="proxy-fields" id="proxyFields">
+        <div class="field row3">
+          <input id="setProxyPort" placeholder="1080" inputmode="numeric" autocomplete="off" title="Порт SOCKS5">
+          <input id="setProxyUser" placeholder="логин" autocomplete="off" title="Логин (пусто — без пароля)">
+          <input id="setProxyPass" type="password" placeholder="пароль" autocomplete="off" title="Пароль">
+        </div>
+        <div class="proxy-addr" id="proxyAddrBox" style="display:none">
+          <span id="proxyAddrText">—</span>
+          <button class="btn small" id="copyProxy" type="button">Копировать</button>
+        </div>
+      </div>
+
       <div class="form-error" id="settingsError"></div>
     </div>
     <div class="row sticky">
@@ -663,6 +685,13 @@
     setText('modeLine', s.service ? 'Служба: работает' : 'Режим: локальный (нужен администратор)');
     setText('serverLine', 'Сервер: ' + (s.server || '—'));
     setText('hubLine', 'Хаб: ' + (s.hub || (s.server ? 'по адресу сервера' : '—')));
+    var proxyLine = $('proxyLine');
+    if (s.proxy_enabled && s.proxy_addr) {
+      proxyLine.textContent = 'Прокси: ' + s.proxy_addr + (s.connected ? '' : ' (включится с туннелем)');
+      proxyLine.style.display = 'block';
+    } else {
+      proxyLine.style.display = 'none';
+    }
 
     setText('netName', s.network || 'Сеть не выбрана');
     setText('netCount', connected && peers.length ? String(peers.length + 1) + ' уч.' : '');
@@ -728,10 +757,9 @@
 
   function openSettings() {
     if (!STATE) return;
-    setText('setName', STATE.self_name || '—');
-    setText('setNodeID', STATE.node_id || '—');
-    setText('setIP', STATE.configured ? (STATE.self_ip || '—') : '—');
-    setText('setMode', STATE.service ? 'через службу' : 'локальный (нужны права администратора)');
+    setText('setName', (STATE.self_name || '—') + (STATE.node_id ? ' · ' + STATE.node_id : ''));
+    setText('setIP', (STATE.configured ? (STATE.self_ip || '—') : '—') + ' · ' +
+      (STATE.service ? 'через службу' : 'локальный'));
     setText('setSvcState', STATE.service_running ? 'работает' : (STATE.service_installed ? 'остановлена' : 'не установлена'));
     var installed = !!STATE.service_installed;
     var running = !!STATE.service_running;
@@ -756,6 +784,14 @@
     $('setHub').value = STATE.hub || '';
     $('setTls').checked = (STATE.server || '').indexOf('https://') === 0;
     $('setPin').value = STATE.hub_pin || '';
+    $('setProxyOn').checked = !!STATE.proxy_enabled;
+    $('setProxyPort').value = STATE.proxy_port || 1080;
+    $('setProxyUser').value = STATE.proxy_user || '';
+    $('setProxyPass').value = STATE.proxy_pass || '';
+    $('proxyFields').classList.toggle('on', !!STATE.proxy_enabled);
+    var proxyAddr = STATE.proxy_addr || '';
+    $('proxyAddrBox').style.display = proxyAddr ? 'flex' : 'none';
+    setText('proxyAddrText', proxyAddr || '—');
     $('settingsError').style.display = 'none';
     openModal('settingsModal');
   }
@@ -874,10 +910,17 @@
       return;
     }
 
+    var proxyPort = parseInt($('setProxyPort').value, 10);
+    if (isNaN(proxyPort) || proxyPort < 1 || proxyPort > 65535) proxyPort = 1080;
+
     var res = await act('settings', {
       server: server,
       hub: $('setHub').value.trim(),
-      pin: pin
+      pin: pin,
+      proxy_enabled: $('setProxyOn').checked,
+      proxy_port: proxyPort,
+      proxy_user: $('setProxyUser').value.trim(),
+      proxy_pass: $('setProxyPass').value
     });
     if (res.ok) {
       $('settingsModal').classList.remove('show');
@@ -886,6 +929,16 @@
       $('settingsError').textContent = res.error || 'Не удалось сохранить';
       $('settingsError').style.display = 'block';
     }
+  });
+
+  $('setProxyOn').addEventListener('change', function () {
+    $('proxyFields').classList.toggle('on', this.checked);
+  });
+
+  $('copyProxy').addEventListener('click', async function () {
+    var addr = (STATE && STATE.proxy_addr) || '';
+    if (!addr) return;
+    await act('copy_text', { text: addr });
   });
 
   $('authSubmit').addEventListener('click', async function () {

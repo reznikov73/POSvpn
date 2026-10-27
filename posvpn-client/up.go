@@ -92,6 +92,11 @@ func runUp(args []string) error {
 		MTU:        *mtu,
 		Adapter:    *adapter,
 		NetMap:     netmap,
+
+		ProxyEnabled: cfg.ProxyEnabled,
+		ProxyPort:    cfg.ProxyPort,
+		ProxyUser:    cfg.ProxyUser,
+		ProxyPass:    cfg.ProxyPass,
 	})
 	if err != nil {
 		return err

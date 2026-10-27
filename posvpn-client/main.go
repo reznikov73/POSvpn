@@ -49,6 +49,12 @@ type config struct {
 	Index      uint32 `json:"index,omitempty"`
 	PublicKey  string `json:"public_key"`
 	PrivateKey string `json:"private_key"`
+
+	// Прокси: узел отдаёт свой интернет участникам сети по SOCKS5.
+	ProxyEnabled bool   `json:"proxy_enabled,omitempty"`
+	ProxyPort    int    `json:"proxy_port,omitempty"`
+	ProxyUser    string `json:"proxy_user,omitempty"`
+	ProxyPass    string `json:"proxy_pass,omitempty"`
 }
 
 func main() {

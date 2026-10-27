@@ -55,6 +55,11 @@ type pipeRequest struct {
 	Password string          `json:"password,omitempty"`
 	Node     string          `json:"node,omitempty"`
 	Config   json.RawMessage `json:"config,omitempty"`
+
+	ProxyEnabled bool   `json:"proxy_enabled,omitempty"`
+	ProxyPort    int    `json:"proxy_port,omitempty"`
+	ProxyUser    string `json:"proxy_user,omitempty"`
+	ProxyPass    string `json:"proxy_pass,omitempty"`
 }
 
 type pipeResponse struct {
@@ -111,6 +116,13 @@ func (a *serviceApp) snapshot() guiState {
 		state.SelfIP = cfg.IP
 		state.SelfIndex = cfg.Index
 		state.NodeID = cfg.NodeID
+		state.ProxyEnabled = cfg.ProxyEnabled
+		state.ProxyPort = cfg.ProxyPort
+		state.ProxyUser = cfg.ProxyUser
+		state.ProxyPass = cfg.ProxyPass
+		if cfg.ProxyEnabled {
+			state.ProxyAddr = proxyAddress(cfg.IP, cfg.ProxyPort)
+		}
 	}
 	state.ServiceInstalled = true
 	state.ServiceRunning = true
@@ -203,6 +215,16 @@ func (a *serviceApp) applySettings(req pipeRequest) error {
 	}
 	cfg.Hub = strings.TrimSpace(req.Hub)
 	cfg.HubPin = strings.TrimSpace(req.Pin)
+	cfg.ProxyEnabled = req.ProxyEnabled
+	cfg.ProxyPort = req.ProxyPort
+	if cfg.ProxyPort <= 0 || cfg.ProxyPort > 65535 {
+		cfg.ProxyPort = defaultProxyPort
+	}
+	cfg.ProxyUser = strings.TrimSpace(req.ProxyUser)
+	cfg.ProxyPass = req.ProxyPass
+	if cfg.ProxyUser == "" {
+		cfg.ProxyPass = ""
+	}
 	if err := saveConfig(cfg); err != nil {
 		return err
 	}
