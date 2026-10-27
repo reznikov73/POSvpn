@@ -23,7 +23,7 @@ VersionInfoProductVersion={#MyAppVersion}
 DefaultDirName={autopf}\POSvpn
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=out
 OutputBaseFilename=POSvpn-Setup-{#MyAppVersion}
@@ -44,6 +44,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "autostart"; Description: "Запускать окно POSvpn при входе в Windows (пока без службы — потребуется подтверждение UAC)"; GroupDescription: "Автозапуск"; Flags: unchecked
 
 [Components]
 Name: "client"; Description: "Клиент POSvpn — создание сети и вход по имени и паролю"; Types: full
@@ -51,6 +52,7 @@ Name: "server"; Description: "Сервер координации POSvpn — р�
 
 [Files]
 Source: "{#RepoRoot}\out\posvpn-client.exe"; DestDir: "{app}"; Components: client; Flags: ignoreversion
+Source: "{#RepoRoot}\out\wintun.dll"; DestDir: "{app}"; Components: client; Flags: ignoreversion
 Source: "{#RepoRoot}\out\posvpn-server.exe"; DestDir: "{app}"; Components: server; Flags: ignoreversion
 Source: "{#RepoRoot}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -60,5 +62,14 @@ Name: "{group}\POSvpn Server"; Filename: "{app}\posvpn-server.exe"; Components: 
 Name: "{group}\{cm:UninstallProgram,POSvpn}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\POSvpn Client"; Filename: "{app}\posvpn-client.exe"; Components: client; Tasks: desktopicon
 
+[Registry]
+; Автозапуск окна. До появления службы Windows при входе будет запрос UAC.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "POSvpn"; ValueData: """{app}\posvpn-client.exe"""; Flags: uninsdeletevalue; Tasks: autostart; Components: client
+
 [Run]
+; Ping внутри виртуальной сети не должен зависеть от профиля брандмауэра.
+Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""POSvpn ICMP"" dir=in action=allow protocol=icmpv4:8,any remoteip=10.77.0.0/16"; Flags: runhidden; StatusMsg: "Добавляем правило брандмауэра…"
 Filename: "{app}\README.md"; Description: "Открыть README"; Flags: postinstall shellexec skipifsilent unchecked
+
+[UninstallRun]
+Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""POSvpn ICMP"""; Flags: runhidden
