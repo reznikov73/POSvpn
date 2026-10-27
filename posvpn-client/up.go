@@ -77,7 +77,7 @@ func runUp(args []string) error {
 	fmt.Printf("Хаб: %s, участников: %d\n", cfg.Hub, len(netmap.Peers)+1)
 	fmt.Println("Туннель поднимается. Ctrl+C — остановить.")
 
-	return runTunnel(ctx, tunnelOptions{
+	session, err := startTunnelSession(tunnelOptions{
 		Server:     cfg.Server,
 		HubAddr:    cfg.Hub,
 		Token:      cfg.Token,
@@ -91,6 +91,13 @@ func runUp(args []string) error {
 		Adapter:    *adapter,
 		NetMap:     netmap,
 	})
+	if err != nil {
+		return err
+	}
+	defer session.Stop()
+
+	<-ctx.Done()
+	return nil
 }
 
 // runDown снимает адреса и маршруты с адаптера, не удаляя драйвер.

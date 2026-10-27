@@ -21,6 +21,12 @@ if errorlevel 1 (
     exit /b
 )
 
+rem Without arguments start the window and release the console.
+if "%~1"=="" (
+    start "" "out\posvpn-client.exe"
+    exit /b
+)
+
 out\posvpn-client.exe %*
 echo.
 pause

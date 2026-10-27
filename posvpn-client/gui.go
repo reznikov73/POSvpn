@@ -1,0 +1,397 @@
+//go:build windows
+
+package main
+
+import (
+	_ "embed"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unsafe"
+
+	"github.com/jchv/go-webview2"
+	"golang.org/x/sys/windows"
+
+	"posvpn-engine/tunnel"
+)
+
+//go:embed ui/index.html
+var guiHTML string
+
+// guiApp — окно и его связь с туннелем.
+type guiApp struct {
+	w webview2.WebView
+
+	mu       sync.Mutex
+	session  *tunnelSession
+	starting bool
+	lastErr  string
+}
+
+type guiState struct {
+	Configured bool      `json:"configured"`
+	Server     string    `json:"server"`
+	Hub        string    `json:"hub"`
+	Network    string    `json:"network"`
+	SelfName   string    `json:"self_name"`
+	SelfIP     string    `json:"self_ip"`
+	SelfIndex  uint32    `json:"self_index"`
+	Running    bool      `json:"running"`
+	Connected  bool      `json:"connected"`
+	Starting   bool      `json:"starting"`
+	Error      string    `json:"error"`
+	HasWintun  bool      `json:"has_wintun"`
+	Elevated   bool      `json:"elevated"`
+	Peers      []guiPeer `json:"peers"`
+}
+
+type guiPeer struct {
+	Name   string `json:"name"`
+	IP     string `json:"ip"`
+	Index  uint32 `json:"index"`
+	Role   string `json:"role"`
+	Online bool   `json:"online"`
+	RTT    int64  `json:"rtt"`
+}
+
+type guiRequest struct {
+	Server   string `json:"server"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
+	Node     string `json:"node"`
+}
+
+// guiLog пишет строку в тот же журнал, что и JS-ошибки.
+func guiLog(format string, args ...any) {
+	path := filepath.Join(os.TempDir(), "posvpn-gui.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
+}
+
+// runGUI открывает окно. Возвращает ошибку, если WebView2 недоступен.
+// autoConnect сразу поднимает туннель — удобно для автозапуска.
+func runGUI(autoConnect bool) error {
+	hideConsole()
+
+	dataPath := filepath.Join(os.Getenv("LOCALAPPDATA"), "POSvpn", "webview2")
+	_ = os.MkdirAll(dataPath, 0o700)
+
+	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		Debug:     false,
+		AutoFocus: true,
+		DataPath:  dataPath,
+		WindowOptions: webview2.WindowOptions{
+			Title:  "POSvpn",
+			Width:  440,
+			Height: 700,
+			Center: true,
+		},
+	})
+	if w == nil {
+		return errors.New("не удалось открыть окно: не установлен WebView2 Runtime")
+	}
+	defer w.Destroy()
+
+	app := &guiApp{w: w}
+	if err := w.Bind("posvpnState", app.State); err != nil {
+		return fmt.Errorf("привязка состояния: %w", err)
+	}
+	if err := w.Bind("posvpnAction", app.Action); err != nil {
+		return fmt.Errorf("привязка действий: %w", err)
+	}
+	if err := w.Bind("posvpnLog", app.Log); err != nil {
+		return fmt.Errorf("привязка журнала: %w", err)
+	}
+
+	w.SetHtml(guiHTML)
+
+	// Отладочный запуск диалога для проверки вёрстки: POSVPN_GUI_DIALOG=create.
+	if dialog := os.Getenv("POSVPN_GUI_DIALOG"); dialog != "" {
+		w.Init("window.addEventListener('load', function(){ setTimeout(function(){ try { setAuthMode('" + dialog + "'); } catch (e) {} }, 300); });")
+		w.SetHtml(guiHTML)
+	}
+
+	app.darkTitleBar()
+	if autoConnect {
+		go func() { _ = app.connect() }()
+	}
+	w.Run()
+
+	app.disconnect()
+	return nil
+}
+
+// State отдаёт в интерфейс всё, что нужно для отрисовки.
+func (a *guiApp) State() (string, error) {
+	cfg, _ := loadConfig()
+
+	state := guiState{
+		HasWintun: hasWintun(),
+		Elevated:  isElevated(),
+		Peers:     []guiPeer{},
+	}
+	if cfg != nil {
+		state.Configured = cfg.Token != ""
+		state.Server = cfg.Server
+		state.Hub = cfg.Hub
+		state.Network = cfg.Network
+		state.SelfName = cfg.Node
+		state.SelfIP = cfg.IP
+		state.SelfIndex = cfg.Index
+	}
+	if state.SelfName == "" {
+		state.SelfName = hostname()
+	}
+
+	a.mu.Lock()
+	session := a.session
+	state.Starting = a.starting
+	if session == nil && a.lastErr != "" {
+		state.Error = a.lastErr
+	}
+	a.mu.Unlock()
+
+	if session != nil {
+		running, connected, lastErr := session.status()
+		state.Running = running
+		state.Connected = connected
+		state.Error = lastErr
+
+		for _, peer := range session.peers.all() {
+			state.Peers = append(state.Peers, guiPeer{
+				Name:   peer.name,
+				IP:     peer.ip.String(),
+				Index:  peer.index,
+				Role:   peer.role,
+				Online: peer.online(),
+				RTT:    peer.rtt(),
+			})
+		}
+		sort.Slice(state.Peers, func(i, j int) bool { return state.Peers[i].Index < state.Peers[j].Index })
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// Action выполняет команду из интерфейса. Ошибки возвращаются в JSON,
+// чтобы окно показало их само, а не молчало.
+func (a *guiApp) Action(name, payload string) (string, error) {
+	var req guiRequest
+	if strings.TrimSpace(payload) != "" {
+		_ = json.Unmarshal([]byte(payload), &req)
+	}
+
+	var err error
+	switch name {
+	case "create":
+		err = guiAuth(req, true)
+	case "join":
+		err = guiAuth(req, false)
+	case "connect":
+		err = a.connect()
+	case "disconnect":
+		a.disconnect()
+	case "quit":
+		if a.w != nil {
+			a.w.Terminate()
+		}
+	default:
+		err = fmt.Errorf("неизвестное действие %q", name)
+	}
+
+	resp := map[string]any{"ok": err == nil}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	raw, _ := json.Marshal(resp)
+	return string(raw), nil
+}
+
+func guiAuth(req guiRequest, create bool) error {
+	if strings.TrimSpace(req.Name) == "" {
+		return errors.New("не задано имя сети")
+	}
+	if len(req.Password) < 8 {
+		return errors.New("пароль сети короче 8 символов")
+	}
+	node := strings.TrimSpace(req.Node)
+	if node == "" {
+		node = hostname()
+	}
+	server := strings.TrimSpace(req.Server)
+
+	args := []string{"-server", server, "-network", req.Name, "-password", req.Password, "-node", node}
+	if err := runAuth(args, create); err != nil {
+		return err
+	}
+	return nil
+}
+
+// connect поднимает туннель в фоне, чтобы окно не замирало на установке
+// драйвера и подключении к хабу.
+func (a *guiApp) connect() error {
+	a.mu.Lock()
+	if a.session != nil {
+		a.mu.Unlock()
+		return errors.New("туннель уже запущен")
+	}
+	if a.starting {
+		a.mu.Unlock()
+		return errors.New("туннель уже подключается")
+	}
+	a.starting = true
+	a.lastErr = ""
+	a.mu.Unlock()
+
+	cfg, err := loadConfig()
+	if err != nil {
+		a.finishStart(err)
+		return err
+	}
+	if cfg.Token == "" {
+		a.finishStart(errors.New("сначала создайте сеть или войдите в неё"))
+		return errors.New("сначала создайте сеть или войдите в неё")
+	}
+
+	privateKey, err := base64.StdEncoding.DecodeString(cfg.PrivateKey)
+	if err != nil || len(privateKey) != 32 {
+		msg := "в настройках нет корректного приватного ключа: войдите в сеть заново"
+		a.finishStart(errors.New(msg))
+		return errors.New(msg)
+	}
+
+	netmap, err := fetchNetMap(cfg)
+	if err != nil {
+		a.finishStart(err)
+		return err
+	}
+	subnet, err := netip.ParsePrefix(netmap.Subnet)
+	if err != nil {
+		msg := fmt.Sprintf("сервер прислал некорректную подсеть %q", netmap.Subnet)
+		a.finishStart(errors.New(msg))
+		return errors.New(msg)
+	}
+
+	hub := cfg.Hub
+	if hub == "" {
+		hub = defaultHubAddr(cfg.Server)
+	}
+
+	opt := tunnelOptions{
+		Server:     cfg.Server,
+		HubAddr:    hub,
+		Token:      cfg.Token,
+		NetworkID:  netmap.NetworkID,
+		Subnet:     subnet,
+		SelfIndex:  netmap.Self.Index,
+		SelfIP:     netmap.Self.IP,
+		PrivateKey: privateKey,
+		Pin:        cfg.HubPin,
+		MTU:        tunnel.DefaultMTU,
+		Adapter:    "POSvpn",
+		NetMap:     netmap,
+	}
+
+	go func() {
+		guiLog("connect: старт")
+		session, err := startTunnelSession(opt)
+		a.mu.Lock()
+		a.starting = false
+		if err != nil {
+			a.lastErr = err.Error()
+			guiLog("connect: ошибка: %v", err)
+		} else {
+			a.session = session
+			a.lastErr = ""
+			guiLog("connect: сессия создана")
+		}
+		a.mu.Unlock()
+	}()
+	return nil
+}
+
+func (a *guiApp) finishStart(err error) {
+	a.mu.Lock()
+	a.starting = false
+	if err != nil {
+		a.lastErr = err.Error()
+	}
+	a.mu.Unlock()
+}
+
+func (a *guiApp) disconnect() {
+	a.mu.Lock()
+	session := a.session
+	a.session = nil
+	a.mu.Unlock()
+	if session != nil {
+		session.Stop()
+	}
+}
+
+// Log пишет строку из интерфейса в журнал рядом с временными файлами.
+// Нужен, чтобы видеть ошибки JS, которые иначе не видны в окне.
+func (a *guiApp) Log(line string) (string, error) {
+	path := filepath.Join(os.TempDir(), "posvpn-gui.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05"), line)
+	return "", nil
+}
+
+// hasWintun проверяет, есть ли драйвер рядом с exe или в системе.
+func hasWintun() bool {
+	_, ok := wintunPath()
+	return ok
+}
+
+// darkTitleBar красит заголовок окна в тёмный цвет, чтобы он не выбивался
+// из интерфейса.
+func (a *guiApp) darkTitleBar() {
+	if a.w == nil {
+		return
+	}
+	hwnd := windows.HWND(uintptr(a.w.Window()))
+	if hwnd == 0 {
+		return
+	}
+	dwmapi := windows.NewLazySystemDLL("dwmapi.dll")
+	setAttr := dwmapi.NewProc("DwmSetWindowAttribute")
+	var enabled int32 = 1
+	for _, attr := range []uintptr{20, 19} {
+		_, _, _ = setAttr.Call(uintptr(hwnd), attr, uintptr(unsafe.Pointer(&enabled)), unsafe.Sizeof(enabled))
+	}
+}
+
+// hideConsole прячет консольное окно, когда клиент запущен как GUI.
+func hideConsole() {
+	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+	getConsole := kernel32.NewProc("GetConsoleWindow")
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	showWindow := user32.NewProc("ShowWindow")
+
+	hwnd, _, _ := getConsole.Call()
+	if hwnd != 0 {
+		const swHide = 0
+		_, _, _ = showWindow.Call(hwnd, swHide)
+	}
+}

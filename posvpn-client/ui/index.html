@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POSvpn</title>
+<style>
+  :root {
+    --bg: #10141b;
+    --panel: #1a202a;
+    --panel-2: #212a37;
+    --line: #2b3546;
+    --text: #e7eef7;
+    --muted: #8b98ab;
+    --accent: #35b4e8;
+    --accent-2: #1f7fae;
+    --green: #43c07b;
+    --yellow: #e0b341;
+    --red: #e35d5d;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.35 "Segoe UI", Tahoma, sans-serif;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px 8px;
+  }
+  .logo { width: 28px; height: 32px; flex: none; }
+  .brand {
+    font-size: 16px;
+    letter-spacing: 2.5px;
+    font-weight: 600;
+  }
+  .brand span { color: var(--accent); }
+  .tag {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  nav {
+    display: flex;
+    gap: 2px;
+    padding: 0 8px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .menu {
+    position: relative;
+    padding: 5px 12px;
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: default;
+  }
+  .menu:hover, .menu.open { background: var(--panel-2); color: var(--text); }
+  .dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 210px;
+    padding: 6px;
+    background: #232c3a;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 14px 30px rgba(0,0,0,.45);
+    z-index: 20;
+  }
+  .menu.open .dropdown { display: block; }
+  .item {
+    padding: 7px 10px;
+    border-radius: 5px;
+    color: var(--text);
+    cursor: default;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .item:hover { background: var(--accent-2); }
+  .item.disabled { color: #5d6a7d; pointer-events: none; }
+  .item .hint { color: #9fb0c6; font-size: 12px; }
+  .sep { height: 1px; margin: 5px 4px; background: var(--line); }
+
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  main::-webkit-scrollbar { width: 8px; }
+  main::-webkit-scrollbar-thumb { background: #2f3a4b; border-radius: 8px; }
+
+  .card {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #202937, #1a222d);
+    border: 1px solid var(--line);
+  }
+
+  .power {
+    width: 84px;
+    height: 84px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid #3b475a;
+    background: radial-gradient(circle at 50% 35%, #2a3342, #1a222d 70%);
+    color: #6c7c90;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    transition: .15s;
+  }
+  .power:hover { border-color: #4a5a72; }
+  .power.on {
+    border-color: var(--accent);
+    color: #d9f4ff;
+    background: radial-gradient(circle at 50% 35%, #2b6f8f, #17303f 72%);
+    box-shadow: 0 0 22px rgba(53,180,232,.35), inset 0 0 18px rgba(53,180,232,.25);
+  }
+  .power.busy {
+    border-color: var(--yellow);
+    color: #ffe9b0;
+    box-shadow: 0 0 18px rgba(224,179,65,.25);
+  }
+  .power .glyph { width: 27px; height: 27px; display: block; }
+  .power .word { font-size: 11px; letter-spacing: 2px; }
+
+  .me { min-width: 0; flex: 1; }
+  .me .name {
+    font-size: 19px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .me .ip {
+    margin-top: 2px;
+    font: 13px/1.4 Consolas, "Courier New", monospace;
+    color: #b9c7d9;
+  }
+  .pill {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    letter-spacing: .4px;
+    background: #2b3546;
+    color: #9fb0c6;
+  }
+  .pill.on { background: rgba(67,192,123,.16); color: var(--green); }
+  .pill.busy { background: rgba(224,179,65,.15); color: var(--yellow); }
+
+  .meta {
+    margin: 8px 2px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    word-break: break-all;
+  }
+
+  .banner {
+    display: none;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    background: rgba(227,93,93,.12);
+    border: 1px solid rgba(227,93,93,.35);
+    color: #ffb9b9;
+  }
+
+  .net {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .net-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: linear-gradient(180deg, #2a3a4f, #22303f);
+    font-weight: 600;
+  }
+  .net-head .chev { color: #a9c3da; font-size: 11px; }
+  .net-head .count {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 12px;
+    color: #a9bdd2;
+  }
+
+  .peers { padding: 4px 0; }
+  .peer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+  .peer + .peer { border-top: 1px solid rgba(43,53,70,.55); }
+  .peer .pname {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .peer .pip {
+    font: 12px/1 Consolas, "Courier New", monospace;
+    color: #a9bdd2;
+  }
+  .peer .rtt {
+    width: 46px;
+    text-align: right;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .peer.off .pname, .peer.off .pip, .peer.off .rtt { color: #617086; }
+
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    width: 18px;
+    flex: none;
+  }
+  .bars i {
+    width: 3px;
+    border-radius: 1px;
+    background: #3a4658;
+  }
+  .bars i:nth-child(1) { height: 4px; }
+  .bars i:nth-child(2) { height: 7px; }
+  .bars i:nth-child(3) { height: 10px; }
+  .bars i:nth-child(4) { height: 13px; }
+  .bars.q4 i { background: var(--green); }
+  .bars.q3 i:nth-child(-n+3) { background: var(--green); }
+  .bars.q2 i:nth-child(-n+2) { background: var(--yellow); }
+  .bars.q1 i:nth-child(1) { background: var(--red); }
+
+  .empty {
+    padding: 16px 12px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  footer {
+    padding: 8px 14px 12px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  #error { color: #ff9d9d; display: none; }
+
+  .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(6,9,13,.66);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal.show { display: flex; }
+  .sheet {
+    width: 100%;
+    max-width: 360px;
+    background: #1d2531;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+    padding: 16px;
+  }
+  .sheet h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+  .field { margin-bottom: 10px; }
+  .field label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: #151b24;
+    color: var(--text);
+    font: 13px "Segoe UI", sans-serif;
+    outline: none;
+    user-select: text;
+  }
+  .field input:focus { border-color: var(--accent-2); }
+  .row { display: flex; gap: 8px; margin-top: 14px; }
+  button.btn {
+    flex: 1;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #263140;
+    color: var(--text);
+    font: 13px "Segoe UI", sans-serif;
+    cursor: pointer;
+  }
+  button.btn:hover { background: #2d3a4c; }
+  button.btn.primary {
+    background: linear-gradient(180deg, #38a9d6, #2a83ab);
+    border-color: #3fb4e4;
+    color: #f2fbff;
+    font-weight: 600;
+  }
+  button.btn.primary:hover { filter: brightness(1.08); }
+  button.btn:disabled { opacity: .55; cursor: default; }
+
+  .form-error {
+    display: none;
+    margin-top: 8px;
+    color: #ff9d9d;
+    font-size: 12px;
+  }
+
+  .about p { margin: 0 0 8px; color: #c6d3e3; font-size: 12px; line-height: 1.5; }
+  .about .mono { font-family: Consolas, monospace; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <svg class="logo" viewBox="0 0 28 32" aria-hidden="true">
+      <path d="M14 1 26 5v10c0 7.6-5 12.9-12 16C7 27.9 2 22.6 2 15V5L14 1z"
+            fill="#1f7fae" stroke="#35b4e8" stroke-width="1.4"/>
+      <path d="M14 6 22 8.8v6.4c0 5-3.2 8.7-8 11-4.8-2.3-8-6-8-11V8.8L14 6z"
+            fill="#12303f"/>
+      <text x="14" y="20" text-anchor="middle" font-size="10" font-weight="700"
+            fill="#7fd8ff" font-family="Segoe UI, sans-serif">P</text>
+    </svg>
+    <div class="brand">POS<span>VPN</span></div>
+    <div class="tag">виртуальная сеть</div>
+  </header>
+
+  <nav>
+    <div class="menu" data-menu>
+      Система
+      <div class="dropdown">
+        <div class="item disabled">Настройки <span class="hint">позже</span></div>
+        <div class="sep"></div>
+        <div class="item" data-action="quit">Выход</div>
+      </div>
+    </div>
+    <div class="menu" data-menu>
+      Сеть
+      <div class="dropdown">
+        <div class="item" data-open="create">Создать сеть… <span class="hint">Ins</span></div>
+        <div class="item" data-open="join">Присоединиться к сети… <span class="hint">+</span></div>
+        <div class="sep"></div>
+        <div class="item" data-action="disconnect">Отключиться</div>
+      </div>
+    </div>
+    <div class="menu" data-menu>
+      Справка
+      <div class="dropdown">
+        <div class="item" data-open="about">О программе</div>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <div class="banner" id="banner"></div>
+
+    <section class="card">
+      <div class="power" id="power">
+        <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.2v8.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M6.4 6.6a8 8 0 1 0 11.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <div class="word" id="powerWord">OFF</div>
+      </div>
+      <div class="me">
+        <div class="name" id="selfName">—</div>
+        <div class="ip" id="selfIP">не настроено</div>
+        <div class="pill" id="pill">не подключено</div>
+      </div>
+    </section>
+
+    <div class="meta">
+      <div id="serverLine">Сервер: —</div>
+      <div id="hubLine">Хаб: —</div>
+    </div>
+
+    <section class="net">
+      <div class="net-head">
+        <span class="chev">&#9660;</span>
+        <span id="netName">Сеть не выбрана</span>
+        <span class="count" id="netCount"></span>
+      </div>
+      <div class="peers" id="peers">
+        <div class="empty">Создайте сеть или войдите в существующую</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div id="status">Готово к работе</div>
+    <div id="error"></div>
+  </footer>
+</div>
+
+<div class="modal" id="authModal">
+  <div class="sheet">
+    <h2 id="authTitle">Создать сеть</h2>
+    <div class="field">
+      <label for="fServer">Адрес координатора</label>
+      <input id="fServer" placeholder="http://127.0.0.1:8787" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fName">Имя сети</label>
+      <input id="fName" placeholder="office" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fPassword">Пароль сети</label>
+      <input id="fPassword" type="password" placeholder="не короче 8 символов" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fNode">Имя этого компьютера</label>
+      <input id="fNode" placeholder="PC-1" autocomplete="off">
+    </div>
+    <div class="form-error" id="authError"></div>
+    <div class="row">
+      <button class="btn" id="authCancel" type="button">Отмена</button>
+      <button class="btn primary" id="authSubmit" type="button">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="aboutModal">
+  <div class="sheet about">
+    <h2>POSvpn</h2>
+    <p>Виртуальная локальная сеть через интернет. Вход по имени сети и паролю,
+       без аккаунта и настройки роутера.</p>
+    <p class="mono">Трафик: X25519 + ChaCha20-Poly1305<br>Транспорт: QUIC, свой кадр<br>Адресация: 10.77.0.0/16</p>
+    <p class="mono" id="aboutState"></p>
+    <div class="row">
+      <button class="btn primary" id="aboutClose" type="button">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var STATE = null;
+  var AUTH_MODE = 'create';
+
+  function diag(message) {
+    try { if (window.posvpnLog) window.posvpnLog(message); } catch (e) {}
+  }
+  window.onerror = function (message, source, line) {
+    diag('JS error: ' + message + ' @ ' + line);
+  };
+  diag('start: state=' + typeof window.posvpnState + ' action=' + typeof window.posvpnAction);
+
+  function $(id) { return document.getElementById(id); }
+
+  function setText(id, value) {
+    var el = $(id);
+    if (el && el.textContent !== value) el.textContent = value;
+  }
+
+  function showError(message) {
+    var el = $('error');
+    if (!message) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.textContent = message;
+    el.style.display = 'block';
+  }
+
+  function openModal(id) {
+    document.querySelectorAll('.modal').forEach(function (m) { m.classList.remove('show'); });
+    $(id).classList.add('show');
+    if (id === 'authModal') {
+      setTimeout(function () { $('fName').focus(); }, 30);
+    }
+  }
+
+  function closeModals() {
+    document.querySelectorAll('.modal').forEach(function (m) { m.classList.remove('show'); });
+  }
+
+  function setAuthMode(mode) {
+    AUTH_MODE = mode;
+    var create = mode === 'create';
+    setText('authTitle', create ? 'Создать сеть' : 'Присоединиться к сети');
+    setText('authSubmit', create ? 'Создать' : 'Войти');
+    if (STATE && STATE.server) $('fServer').value = STATE.server;
+    else if (!$('fServer').value) $('fServer').value = 'http://127.0.0.1:8787';
+    $('fNode').value = (STATE && STATE.self_name) ? STATE.self_name : '';
+    $('authError').style.display = 'none';
+    openModal('authModal');
+  }
+
+  async function refresh() {
+    try {
+      var raw = await window.posvpnState();
+      STATE = JSON.parse(raw);
+      render(STATE);
+    } catch (e) {
+      diag('refresh failed: ' + e);
+      showError('Окно ещё инициализируется…');
+    }
+  }
+
+  async function act(name, payload) {
+    try {
+      var raw = await window.posvpnAction(name, JSON.stringify(payload || {}));
+      var res = JSON.parse(raw);
+      await refresh();
+      return res;
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  }
+
+  function render(s) {
+    var connected = !!s.connected;
+    var busy = !!s.starting || (s.running && !s.connected);
+    var peers = s.peers || [];
+
+    var power = $('power');
+    power.classList.toggle('on', connected);
+    power.classList.toggle('busy', busy && !connected);
+    setText('powerWord', connected ? 'ON' : (busy ? '...' : 'OFF'));
+
+    setText('selfName', s.self_name || '—');
+    setText('selfIP', s.configured ? (s.self_ip || '—') : 'не настроено');
+
+    var pill = $('pill');
+    pill.className = 'pill' + (connected ? ' on' : (busy ? ' busy' : ''));
+    setText('pill', connected ? 'В сети' : (busy ? 'Подключение…' : (s.configured ? 'Не подключено' : 'Не настроено')));
+
+    setText('serverLine', 'Сервер: ' + (s.server || '—'));
+    setText('hubLine', 'Хаб: ' + (s.hub || (s.server ? 'по адресу сервера' : '—')));
+
+    setText('netName', s.network || 'Сеть не выбрана');
+    setText('netCount', connected && peers.length ? String(peers.length + 1) + ' уч.' : '');
+
+    var banner = $('banner');
+    var messages = [];
+    if (!s.elevated) messages.push('Нет прав администратора: туннель не поднимется. Запустите start-client.bat.');
+    if (!s.has_wintun) messages.push('Не найден wintun.dll. Положите его рядом с exe или запустите tools\\fetch-wintun.ps1.');
+    if (messages.length) {
+      banner.textContent = messages.join(' ');
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+
+    var status = 'Готово к работе';
+    if (s.starting) status = 'Поднимаем адаптер и подключаемся к хабу…';
+    else if (connected) status = 'Туннель поднят · участников: ' + (peers.length + 1);
+    else if (s.running) status = 'Переподключение к хабу…';
+    else if (s.configured) status = 'Туннель выключен';
+    else status = 'Создайте сеть или войдите в существующую';
+    setText('status', status);
+
+    showError(s.error || '');
+
+    var peersBox = $('peers');
+    if (!peers.length) {
+      peersBox.innerHTML = '<div class="empty">' +
+        (connected ? 'В сети пока только вы' : 'Нет данных: подключитесь к сети') + '</div>';
+    } else {
+      var html = '';
+      peers.forEach(function (p) {
+        var q = quality(p);
+        html += '<div class="peer ' + (p.online ? '' : 'off') + '">' +
+          '<div class="bars q' + q + '"><i></i><i></i><i></i><i></i></div>' +
+          '<div class="pname" title="' + esc(p.name) + '">' + esc(p.name) + '</div>' +
+          '<div class="pip">' + esc(p.ip) + '</div>' +
+          '<div class="rtt">' + (p.online && p.rtt ? p.rtt + ' мс' : (p.online ? '…' : 'офлайн')) + '</div>' +
+          '</div>';
+      });
+      peersBox.innerHTML = html;
+    }
+
+    setText('aboutState', 'Узлов в сети: ' + (peers.length + (s.configured ? 1 : 0)) +
+      ' · индекс: ' + (s.self_index || '—'));
+  }
+
+  function quality(p) {
+    if (!p.online) return 0;
+    if (!p.rtt) return 3;
+    if (p.rtt <= 40) return 4;
+    if (p.rtt <= 90) return 3;
+    if (p.rtt <= 180) return 2;
+    return 1;
+  }
+
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  $('power').addEventListener('click', async function () {
+    if (!STATE) return;
+    if (STATE.connected || STATE.running) {
+      await act('disconnect');
+    } else if (!STATE.configured) {
+      setAuthMode('create');
+    } else {
+      await act('connect');
+    }
+  });
+
+  document.querySelectorAll('[data-open]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var what = el.getAttribute('data-open');
+      closeMenus();
+      if (what === 'create' || what === 'join') setAuthMode(what);
+      if (what === 'about') openModal('aboutModal');
+    });
+  });
+
+  document.querySelectorAll('[data-action]').forEach(function (el) {
+    el.addEventListener('click', async function () {
+      closeMenus();
+      await act(el.getAttribute('data-action'));
+    });
+  });
+
+  document.querySelectorAll('[data-menu]').forEach(function (menu) {
+    menu.addEventListener('click', function (e) {
+      if (e.target.closest('.dropdown')) return;
+      var open = menu.classList.contains('open');
+      closeMenus();
+      if (!open) menu.classList.add('open');
+    });
+  });
+
+  function closeMenus() {
+    document.querySelectorAll('.menu').forEach(function (m) { m.classList.remove('open'); });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.menu')) closeMenus();
+  });
+
+  $('authCancel').addEventListener('click', closeModals);
+  $('aboutClose').addEventListener('click', closeModals);
+
+  $('authSubmit').addEventListener('click', async function () {
+    var payload = {
+      server: $('fServer').value.trim(),
+      name: $('fName').value.trim(),
+      password: $('fPassword').value,
+      node: $('fNode').value.trim()
+    };
+    var err = $('authError');
+    if (!payload.name) { err.textContent = 'Укажите имя сети'; err.style.display = 'block'; return; }
+    if (payload.password.length < 8) { err.textContent = 'Пароль короче 8 символов'; err.style.display = 'block'; return; }
+
+    $('authSubmit').disabled = true;
+    var res = await act(AUTH_MODE, payload);
+    $('authSubmit').disabled = false;
+    if (res.ok) {
+      closeModals();
+      $('fPassword').value = '';
+    } else {
+      err.textContent = res.error || 'Не получилось';
+      err.style.display = 'block';
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeModals();
+    if (e.key === 'Insert') { setAuthMode('create'); }
+  });
+
+  refresh();
+  setInterval(refresh, 1000);
+</script>
+</body>
+</html>

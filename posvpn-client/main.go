@@ -32,9 +32,11 @@ type config struct {
 	Hub        string `json:"hub,omitempty"`
 	HubPin     string `json:"hub_pin,omitempty"`
 	NodeID     string `json:"node_id"`
+	Node       string `json:"node,omitempty"`
 	Token      string `json:"token"`
 	Network    string `json:"network"`
 	IP         string `json:"ip"`
+	Index      uint32 `json:"index,omitempty"`
 	PublicKey  string `json:"public_key"`
 	PrivateKey string `json:"private_key"`
 }
@@ -42,7 +44,11 @@ type config struct {
 func main() {
 	console.UTF8()
 	if len(os.Args) < 2 {
-		runWizard()
+		// Без аргументов — окно. Если WebView2 нет, остаётся консольный мастер.
+		if err := runGUI(false); err != nil {
+			fmt.Fprintln(os.Stderr, "окно недоступно:", err)
+			runWizard()
+		}
 		return
 	}
 
@@ -54,6 +60,17 @@ func main() {
 		err = runAuth(os.Args[2:], false)
 	case "status", "peers":
 		err = runStatus(os.Args[2:])
+	case "gui":
+		autoConnect := false
+		for _, arg := range os.Args[2:] {
+			if arg == "-connect" {
+				autoConnect = true
+			}
+		}
+		err = runGUI(autoConnect)
+	case "wizard":
+		runWizard()
+		return
 	case "up":
 		err = runUp(os.Args[2:])
 	case "down":
@@ -74,7 +91,8 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `POSvpn — виртуальная локальная сеть
 
-  posvpn-client                 мастер: меню на русском
+  posvpn-client                 окно программы (без аргументов)
+  posvpn-client wizard          меню в консоли
   posvpn-client create -network <имя> -password <пароль> [-node <имя ПК>] [-server <url>]
   posvpn-client join   -network <имя> -password <пароль> [-node <имя ПК>] [-server <url>]
   posvpn-client status
@@ -145,6 +163,8 @@ func runAuth(args []string, create bool) error {
 	cfg.NodeID = resp.NodeID
 	cfg.Network = resp.NetMap.NetworkName
 	cfg.IP = resp.NetMap.Self.IP
+	cfg.Index = resp.NetMap.Self.Index
+	cfg.Node = *nodeName
 	if err := saveConfig(cfg); err != nil {
 		return err
 	}
@@ -249,8 +269,13 @@ func call(method, url, token string, body, out any) error {
 
 func configPath() (string, error) {
 	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("не удалось определить каталог настроек: %w", err)
+	if err != nil || dir == "" {
+		// В службе и в урезанном окружении %AppData% может отсутствовать.
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return "", fmt.Errorf("не удалось определить каталог настроек: %w", err)
+		}
+		dir = filepath.Join(home, "AppData", "Roaming")
 	}
 	return filepath.Join(dir, "POSvpn", "client.json"), nil
 }
