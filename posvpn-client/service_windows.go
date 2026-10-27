@@ -41,6 +41,9 @@ type serviceApp struct {
 	session  *tunnelSession
 	starting bool
 	lastErr  string
+	// want — туннель должен быть поднят. true после подключения (в том числе
+	// автоподключения), false после явного отключения пользователем.
+	want bool
 }
 
 type pipeRequest struct {
@@ -155,6 +158,7 @@ func (a *serviceApp) connect() error {
 	}
 	a.starting = true
 	a.lastErr = ""
+	a.want = true
 	a.mu.Unlock()
 
 	go func() {
@@ -178,6 +182,8 @@ func (a *serviceApp) disconnect() {
 	a.mu.Lock()
 	session := a.session
 	a.session = nil
+	a.want = false
+	a.lastErr = ""
 	a.mu.Unlock()
 	if session != nil {
 		session.Stop()
@@ -246,6 +252,69 @@ func (a *serviceApp) importConfig(raw json.RawMessage) error {
 		}
 	}()
 	return nil
+}
+
+// startWatchdog держит туннель поднятым: если координатор был недоступен
+// при загрузке или сеанс оборвался, служба повторяет попытки с нарастающей
+// паузой. Без этого после старта раньше сервера туннель не поднимался вовсе.
+func (a *serviceApp) startWatchdog(ctx context.Context) {
+	go func() {
+		delay := 5 * time.Second
+		const maxDelay = time.Minute
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+
+			a.mu.Lock()
+			want := a.want
+			session := a.session
+			starting := a.starting
+			a.mu.Unlock()
+			if !want || starting {
+				delay = 5 * time.Second
+				continue
+			}
+
+			if session != nil {
+				running, _, lastErr := session.status()
+				if running {
+					delay = 5 * time.Second
+					continue
+				}
+				log.Printf("служба: сеанс завершён (%s), переподключаемся", lastErr)
+				session.Stop()
+				a.mu.Lock()
+				if a.session == session {
+					a.session = nil
+				}
+				a.mu.Unlock()
+			}
+
+			before := a.snapshot().Error
+			if err := a.connect(); err != nil {
+				log.Printf("служба: повтор подключения: %v", err)
+				delay = maxDelay
+				continue
+			}
+			// Подключение идёт в фоне: даём ему завершиться до следующей проверки.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(4 * time.Second):
+			}
+			if a.snapshot().Error != "" && a.snapshot().Error != before {
+				delay *= 2
+				if delay > maxDelay {
+					delay = maxDelay
+				}
+			} else {
+				delay = 5 * time.Second
+			}
+		}
+	}()
 }
 
 // serviceStatusInfo сообщает, установлена ли служба и работает ли она.
@@ -378,6 +447,9 @@ func (posvpnService) Execute(args []string, requests <-chan svc.ChangeRequest, c
 			}
 		}
 	}()
+	// Служба стартует вместе с Windows, раньше координатора: без сторожа
+	// одна неудачная попытка оставляла туннель опущенным до перезапуска.
+	app.startWatchdog(ctx)
 	go func() {
 		if err := servePipe(ctx, app); err != nil {
 			log.Printf("служба: pipe остановлен: %v", err)
@@ -498,6 +570,8 @@ func runServiceConsole() error {
 			log.Printf("автоподключение: %v", err)
 		}
 	}
+	// Повторяем подключение, пока координатор не ответит.
+	app.startWatchdog(ctx)
 	go func() {
 		if err := servePipe(ctx, app); err != nil {
 			log.Printf("pipe: %v", err)

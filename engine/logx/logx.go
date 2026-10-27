@@ -37,6 +37,29 @@ func Setup(component string) (string, error) {
 	return SetupDir(filepath.Join(dir, "POSvpn", "logs"), component)
 }
 
+// console — второй приёмник журнала. В тестах подменяется, чтобы изобразить
+// процесс без консоли.
+var console io.Writer = os.Stderr
+
+// current — открытый файл журнала: держим его, чтобы закрыть при выходе
+// или перед открытием нового (тесты и повторная настройка).
+var (
+	currentMu sync.Mutex
+	current   *rotatingWriter
+)
+
+// Close закрывает текущий файл журнала.
+func Close() error {
+	currentMu.Lock()
+	defer currentMu.Unlock()
+	if current == nil {
+		return nil
+	}
+	err := current.close()
+	current = nil
+	return err
+}
+
 // SetupDir открывает журнал в заданном каталоге. Служба пишет в ProgramData.
 func SetupDir(dir, component string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -50,8 +73,41 @@ func SetupDir(dir, component string) (string, error) {
 	}
 
 	log.SetFlags(log.LstdFlags)
-	log.SetOutput(io.MultiWriter(os.Stderr, writer))
+	// Файл — первым: у службы и у скрытого окна stderr может быть недействителен,
+	// и при порядке «stderr, файл» MultiWriter обрывает запись на первой ошибке.
+	log.SetOutput(io.MultiWriter(writer, quietWriter{console}))
+
+	currentMu.Lock()
+	previous := current
+	current = writer
+	currentMu.Unlock()
+	if previous != nil {
+		_ = previous.close()
+	}
 	return path, nil
+}
+
+// quietWriter глушит ошибки второго приёмника журнала: отсутствие консоли
+// не должно отнимать записи у файла.
+type quietWriter struct{ w io.Writer }
+
+func (q quietWriter) Write(p []byte) (int, error) {
+	if q.w == nil {
+		return len(p), nil
+	}
+	_, _ = q.w.Write(p)
+	return len(p), nil
+}
+
+func (w *rotatingWriter) close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file == nil {
+		return nil
+	}
+	err := w.file.Close()
+	w.file = nil
+	return err
 }
 
 // rotatingWriter пишет в файл и прокручивает его по размеру.
