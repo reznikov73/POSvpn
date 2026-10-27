@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -158,10 +159,12 @@ func main() {
 	storePath := flag.String("store", "server.json", "файл состояния координатора")
 	certFile := flag.String("tls-cert", "", "сертификат TLS; пусто — работа без TLS (только для локальной отладки)")
 	keyFile := flag.String("tls-key", "", "ключ TLS")
-	guiFlag := flag.Bool("gui", false, "открыть окно сервера (Windows)")
+	guiFlag := flag.Bool("gui", defaultGUIFlag(), "открыть окно сервера (Windows)")
+	consoleFlag := flag.Bool("console", false, "работать без окна: служба, VPS, отладка")
 	flag.Parse()
 
-	store, err := OpenStore(*storePath)
+	resolvedStore := resolveStorePath(*storePath)
+	store, err := OpenStore(resolvedStore)
 	if err != nil {
 		log.Fatalf("состояние не загружено: %v", err)
 	}
@@ -178,7 +181,7 @@ func main() {
 		fingerprint: fingerprint,
 		listen:      *listen,
 		hubAddr:     *hubAddr,
-		storePath:   *storePath,
+		storePath:   resolvedStore,
 		logPath:     logPath,
 		certFile:    *certFile,
 		keyFile:     *keyFile,
@@ -189,7 +192,7 @@ func main() {
 		log.Fatalf("сервер не запущен: %v", err)
 	}
 
-	if *guiFlag {
+	if *guiFlag && !*consoleFlag {
 		if err := runServerGUI(app); err != nil {
 			log.Printf("окно сервера: %v — работаем без окна", err)
 			waitForSignal()
@@ -206,4 +209,32 @@ func waitForSignal() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
+}
+
+// resolveStorePath ищет файл состояния. Если относительный путь не найден в
+// текущем каталоге (частый случай при двойном клике по out\posvpn-server.exe),
+// берётся файл в корне проекта — на уровень выше папки с exe.
+func resolveStorePath(path string) string {
+	exe, err := os.Executable()
+	if err != nil {
+		return resolveStorePathFor(path, "")
+	}
+	return resolveStorePathFor(path, exe)
+}
+
+func resolveStorePathFor(path, exe string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	if exe == "" {
+		return path
+	}
+	candidate := filepath.Join(filepath.Dir(filepath.Dir(exe)), path)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return path
 }

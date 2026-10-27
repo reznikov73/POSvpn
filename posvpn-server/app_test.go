@@ -1,11 +1,29 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"posvpn-engine/tunnel"
 )
+
+func TestResolveStorePathFromOutDir(t *testing.T) {
+	root := t.TempDir()
+	outDir := filepath.Join(root, "out")
+	if err := os.MkdirAll(outDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := filepath.Join(root, "server.json")
+	if err := os.WriteFile(store, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveStorePathFor("server.json", filepath.Join(outDir, "posvpn-server.exe"))
+	if got != store {
+		t.Fatalf("получили %q, ждали %q", got, store)
+	}
+}
 
 func TestServerAppStartStop(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "server.json"))
