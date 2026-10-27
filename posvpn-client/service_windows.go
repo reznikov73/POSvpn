@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -44,6 +45,8 @@ type serviceApp struct {
 type pipeRequest struct {
 	Cmd      string `json:"cmd"`
 	Server   string `json:"server,omitempty"`
+	Hub      string `json:"hub,omitempty"`
+	Pin      string `json:"pin,omitempty"`
 	Name     string `json:"name,omitempty"`
 	Password string `json:"password,omitempty"`
 	Node     string `json:"node,omitempty"`
@@ -87,11 +90,15 @@ func (a *serviceApp) snapshot() guiState {
 		state.Configured = cfg.Token != ""
 		state.Server = cfg.Server
 		state.Hub = cfg.Hub
+		state.HubPin = cfg.HubPin
 		state.Network = cfg.Network
 		state.SelfName = cfg.Node
 		state.SelfIP = cfg.IP
 		state.SelfIndex = cfg.Index
+		state.NodeID = cfg.NodeID
 	}
+	state.ServiceInstalled = true
+	state.ServiceRunning = true
 	if state.SelfName == "" {
 		state.SelfName = hostname()
 	}
@@ -165,6 +172,55 @@ func (a *serviceApp) disconnect() {
 	}
 }
 
+// applySettings сохраняет адреса и отпечаток, затем перезапускает туннель,
+// если он был поднят.
+func (a *serviceApp) applySettings(req pipeRequest) error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	cfg.Server = strings.TrimRight(strings.TrimSpace(req.Server), "/")
+	if cfg.Server == "" {
+		cfg.Server = defaultServer
+	}
+	cfg.Hub = strings.TrimSpace(req.Hub)
+	cfg.HubPin = strings.TrimSpace(req.Pin)
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	running := a.session != nil
+	a.mu.Unlock()
+	if running {
+		a.disconnect()
+		return a.connect()
+	}
+	return nil
+}
+
+// serviceStatusInfo сообщает, установлена ли служба и работает ли она.
+// Обычный пользователь имеет право только на запрос состояния.
+func serviceStatusInfo() (installed, running bool) {
+	manager, err := mgr.Connect()
+	if err != nil {
+		return false, false
+	}
+	defer manager.Disconnect()
+
+	service, err := manager.OpenService(serviceName)
+	if err != nil {
+		return false, false
+	}
+	defer service.Close()
+
+	status, err := service.Query()
+	if err != nil {
+		return true, false
+	}
+	return true, status.State == svc.Running
+}
+
 func (a *serviceApp) action(req pipeRequest) error {
 	switch req.Cmd {
 	case "connect":
@@ -182,6 +238,8 @@ func (a *serviceApp) action(req pipeRequest) error {
 			"-server", req.Server, "-network", req.Name,
 			"-password", req.Password, "-node", req.Node,
 		}, false)
+	case "settings":
+		return a.applySettings(req)
 	default:
 		return fmt.Errorf("неизвестная команда %q", req.Cmd)
 	}

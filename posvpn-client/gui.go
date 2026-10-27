@@ -41,10 +41,14 @@ type guiState struct {
 	Configured bool      `json:"configured"`
 	Server     string    `json:"server"`
 	Hub        string    `json:"hub"`
+	HubPin     string    `json:"hub_pin"`
 	Network    string    `json:"network"`
 	SelfName   string    `json:"self_name"`
 	SelfIP     string    `json:"self_ip"`
 	SelfIndex  uint32    `json:"self_index"`
+	NodeID     string    `json:"node_id"`
+	ServiceInstalled bool `json:"service_installed"`
+	ServiceRunning   bool `json:"service_running"`
 	Running    bool      `json:"running"`
 	Connected  bool      `json:"connected"`
 	Starting   bool      `json:"starting"`
@@ -70,6 +74,9 @@ type guiRequest struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
 	Node     string `json:"node"`
+	Hub      string `json:"hub"`
+	Pin      string `json:"pin"`
+	Command  string `json:"command"`
 }
 
 // guiLog пишет строку в тот же журнал, что и JS-ошибки.
@@ -123,7 +130,11 @@ func runGUI(autoConnect bool) error {
 
 	// Отладочный запуск диалога для проверки вёрстки: POSVPN_GUI_DIALOG=create.
 	if dialog := os.Getenv("POSVPN_GUI_DIALOG"); dialog != "" {
-		w.Init("window.addEventListener('load', function(){ setTimeout(function(){ try { setAuthMode('" + dialog + "'); } catch (e) {} }, 300); });")
+		call := "setAuthMode('" + dialog + "')"
+		if dialog == "settings" {
+			call = "openSettings()"
+		}
+		w.Init("window.addEventListener('load', function(){ setTimeout(function(){ try { " + call + "; } catch (e) {} }, 300); });")
 		w.SetHtml(guiHTML)
 	}
 
@@ -160,11 +171,14 @@ func (a *guiApp) State() (string, error) {
 		state.Configured = cfg.Token != ""
 		state.Server = cfg.Server
 		state.Hub = cfg.Hub
+		state.HubPin = cfg.HubPin
 		state.Network = cfg.Network
 		state.SelfName = cfg.Node
 		state.SelfIP = cfg.IP
 		state.SelfIndex = cfg.Index
+		state.NodeID = cfg.NodeID
 	}
+	state.ServiceInstalled, state.ServiceRunning = serviceStatusInfo()
 	if state.SelfName == "" {
 		state.SelfName = hostname()
 	}
@@ -231,6 +245,10 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 		err = a.connect()
 	case "disconnect":
 		a.disconnect()
+	case "service":
+		err = a.runServiceCommand(req.Command)
+	case "settings":
+		_, err = a.applySettings(req)
 	case "quit":
 		if a.w != nil {
 			a.w.Terminate()
@@ -297,6 +315,54 @@ func (a *guiApp) serviceAction(name string, req guiRequest) (bool, error) {
 		return true, errors.New(resp.Error)
 	}
 	return true, nil
+}
+
+// runServiceCommand выполняет действие со службой. Если прав мало,
+// перезапускает этот же exe с теми же аргументами через UAC.
+func (a *guiApp) runServiceCommand(command string) error {
+	switch command {
+	case "install", "uninstall", "start", "stop":
+	default:
+		return fmt.Errorf("неизвестная команда службы %q", command)
+	}
+	if isElevated() {
+		return serviceCommand([]string{command})
+	}
+	return relaunchElevated([]string{"service", command})
+}
+
+// applySettings сохраняет адреса и отпечаток. Если служба работает,
+// настройки уходят ей; иначе пишутся в локальный конфиг.
+func (a *guiApp) applySettings(req guiRequest) (bool, error) {
+	if resp, err := serviceCall(pipeRequest{
+		Cmd:    "settings",
+		Server: req.Server,
+		Hub:    req.Hub,
+		Pin:    req.Pin,
+	}); err == nil {
+		if !resp.OK {
+			if resp.Error == "" {
+				resp.Error = "служба вернула ошибку"
+			}
+			return true, errors.New(resp.Error)
+		}
+		return true, nil
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return false, err
+	}
+	cfg.Server = strings.TrimRight(strings.TrimSpace(req.Server), "/")
+	if cfg.Server == "" {
+		cfg.Server = defaultServer
+	}
+	cfg.Hub = strings.TrimSpace(req.Hub)
+	cfg.HubPin = strings.TrimSpace(req.Pin)
+	if err := saveConfig(cfg); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 func guiAuth(req guiRequest, create bool) error {

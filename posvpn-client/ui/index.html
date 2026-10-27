@@ -305,6 +305,30 @@
     padding: 16px;
   }
   .sheet h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+  .sheet.settings { max-height: 92vh; overflow-y: auto; }
+  .section-title {
+    margin: 14px 0 6px;
+    font-size: 10.5px;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    font-size: 12.5px;
+  }
+  .info-row span { color: var(--muted); }
+  .info-row b { font-weight: 500; text-align: right; word-break: break-all; }
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 6px 0 2px;
+  }
+  .btn-grid .btn { padding: 7px 10px; font-size: 12px; }
   .field { margin-bottom: 10px; }
   .field label {
     display: block;
@@ -377,7 +401,7 @@
     <div class="menu" data-menu>
       Система
       <div class="dropdown">
-        <div class="item disabled">Настройки <span class="hint">позже</span></div>
+        <div class="item" data-open="settings">Настройки…</div>
         <div class="sep"></div>
         <div class="item" data-action="quit">Выход</div>
       </div>
@@ -464,6 +488,50 @@
     <div class="row">
       <button class="btn" id="authCancel" type="button">Отмена</button>
       <button class="btn primary" id="authSubmit" type="button">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="settingsModal">
+  <div class="sheet settings">
+    <h2>Настройки</h2>
+
+    <div class="section-title">Этот компьютер</div>
+    <div class="info-row"><span>Имя</span><b id="setName">—</b></div>
+    <div class="info-row"><span>ID узла</span><b id="setNodeID">—</b></div>
+    <div class="info-row"><span>Адрес</span><b id="setIP">—</b></div>
+    <div class="info-row"><span>Режим</span><b id="setMode">—</b></div>
+
+    <div class="section-title">Служба</div>
+    <div class="info-row"><span>Состояние</span><b id="setSvcState">—</b></div>
+    <div class="btn-grid">
+      <button class="btn" type="button" data-service="install">Установить</button>
+      <button class="btn" type="button" data-service="start">Запустить</button>
+      <button class="btn" type="button" data-service="stop">Остановить</button>
+      <button class="btn" type="button" data-service="uninstall">Удалить</button>
+    </div>
+    <p class="hint">Без службы окно работает, только пока открыто. Служба поднимает туннель при загрузке ПК и работает без входа в систему.</p>
+
+    <div class="section-title">Подключение</div>
+    <div class="field">
+      <label for="setServer">Сервер</label>
+      <input id="setServer" placeholder="http://127.0.0.1:8787" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="setHub">Хаб (пусто — тот же хост, порт 8788)</label>
+      <input id="setHub" placeholder="авто" autocomplete="off">
+    </div>
+
+    <div class="section-title">Безопасность</div>
+    <div class="field">
+      <label for="setPin">Отпечаток сертификата хаба (пусто — не проверять)</label>
+      <input id="setPin" placeholder="64 hex" autocomplete="off">
+    </div>
+
+    <div class="form-error" id="settingsError"></div>
+    <div class="row">
+      <button class="btn" id="settingsCancel" type="button">Отмена</button>
+      <button class="btn primary" id="settingsSave" type="button">Сохранить</button>
     </div>
   </div>
 </div>
@@ -637,6 +705,20 @@
       .replace(/"/g, '&quot;');
   }
 
+  function openSettings() {
+    if (!STATE) return;
+    setText('setName', STATE.self_name || '—');
+    setText('setNodeID', STATE.node_id || '—');
+    setText('setIP', STATE.configured ? (STATE.self_ip || '—') : '—');
+    setText('setMode', STATE.service ? 'через службу' : 'локальный (нужны права администратора)');
+    setText('setSvcState', STATE.service_running ? 'работает' : (STATE.service_installed ? 'остановлена' : 'не установлена'));
+    $('setServer').value = STATE.server || '';
+    $('setHub').value = STATE.hub || '';
+    $('setPin').value = STATE.hub_pin || '';
+    $('settingsError').style.display = 'none';
+    openModal('settingsModal');
+  }
+
   $('power').addEventListener('click', async function () {
     if (!STATE) return;
     if (STATE.connected || STATE.running) {
@@ -654,6 +736,7 @@
       closeMenus();
       if (what === 'create' || what === 'join') setAuthMode(what);
       if (what === 'about') openModal('aboutModal');
+      if (what === 'settings') openSettings();
     });
   });
 
@@ -683,6 +766,41 @@
 
   $('authCancel').addEventListener('click', closeModals);
   $('aboutClose').addEventListener('click', closeModals);
+  $('settingsCancel').addEventListener('click', closeModals);
+
+  document.querySelectorAll('[data-service]').forEach(function (button) {
+    button.addEventListener('click', async function () {
+      var command = button.getAttribute('data-service');
+      button.disabled = true;
+      var res = await act('service', { command: command });
+      button.disabled = false;
+      if (!res.ok) {
+        $('settingsError').textContent = res.error || 'Не удалось выполнить команду';
+        $('settingsError').style.display = 'block';
+        return;
+      }
+      setTimeout(function () {
+        refresh().then(function () {
+          if ($('settingsModal').classList.contains('show')) openSettings();
+        });
+      }, 1500);
+    });
+  });
+
+  $('settingsSave').addEventListener('click', async function () {
+    var res = await act('settings', {
+      server: $('setServer').value.trim(),
+      hub: $('setHub').value.trim(),
+      pin: $('setPin').value.trim()
+    });
+    if (res.ok) {
+      $('settingsModal').classList.remove('show');
+      await refresh();
+    } else {
+      $('settingsError').textContent = res.error || 'Не удалось сохранить';
+      $('settingsError').style.display = 'block';
+    }
+  });
 
   $('authSubmit').addEventListener('click', async function () {
     var payload = {
