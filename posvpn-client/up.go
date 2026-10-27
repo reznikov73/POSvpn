@@ -6,12 +6,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 
 	"posvpn-engine"
 	"posvpn-engine/tunnel"
@@ -121,6 +123,40 @@ func fetchNetMap(cfg *config) (engine.NetMap, error) {
 		return engine.NetMap{}, err
 	}
 	return netmap, nil
+}
+
+// leaveNetwork выходит из сети: сообщает серверу, затем стирает в настройках
+// сеть, адрес и токен. Узел исчезает из сети навсегда, ключ и имя остаются.
+func leaveNetwork() error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.Token == "" {
+		return errors.New("сеть не выбрана: выходить не из чего")
+	}
+
+	leaveErr := call(http.MethodPost, cfg.Server+"/api/v1/leave", cfg.Token, nil, nil)
+	if leaveErr != nil {
+		// Сеть уже удалена или токен отозван — цель достигнута, чистим настройки.
+		if strings.Contains(leaveErr.Error(), "сеть удалена или вход отозван") {
+			leaveErr = nil
+		}
+	}
+	if leaveErr != nil {
+		return leaveErr
+	}
+
+	cfg.Token = ""
+	cfg.Network = ""
+	cfg.IP = ""
+	cfg.Index = 0
+	cfg.NodeID = ""
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+	log.Printf("выход из сети выполнен, настройки очищены")
+	return nil
 }
 
 // defaultHubAddr выводит адрес хаба из адреса координатора: тот же хост,

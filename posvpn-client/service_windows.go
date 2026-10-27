@@ -346,6 +346,9 @@ func (a *serviceApp) action(req pipeRequest) error {
 	case "disconnect":
 		a.disconnect()
 		return nil
+	case "leave":
+		a.disconnect()
+		return leaveNetwork()
 	case "create":
 		return runAuth([]string{
 			"-server", req.Server, "-network", req.Name,

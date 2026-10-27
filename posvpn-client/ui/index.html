@@ -430,6 +430,7 @@
         <div class="item" data-open="join">Присоединиться к сети… <span class="hint">+</span></div>
         <div class="sep"></div>
         <div class="item" data-action="disconnect">Отключиться</div>
+        <div class="item" data-action="leave">Выйти из сети…</div>
       </div>
     </div>
     <div class="menu" data-menu>
@@ -783,7 +784,14 @@
   document.querySelectorAll('[data-action]').forEach(function (el) {
     el.addEventListener('click', async function () {
       closeMenus();
-      await act(el.getAttribute('data-action'));
+      var action = el.getAttribute('data-action');
+      if (action === 'leave') {
+        if (!confirm('Выйти из сети «' + ((STATE && STATE.network) || '') + '»?\nУзел будет удалён с сервера, для возврата понадобятся имя сети и пароль.')) return;
+      }
+      var res = await act(action);
+      if (action === 'leave' && res && !res.ok) {
+        showError(res.error || 'Не удалось выйти из сети');
+      }
     });
   });
 

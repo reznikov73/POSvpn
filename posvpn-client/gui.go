@@ -409,6 +409,10 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 		err = a.connect()
 	case "disconnect":
 		a.disconnect()
+	case "leave":
+		// Сначала отпускаем туннель и адаптер, потом прощаемся с сетью.
+		a.disconnect()
+		err = leaveNetwork()
 	case "service":
 		err = a.runServiceCommand(req.Command)
 	case "settings":
@@ -470,7 +474,7 @@ func serviceRunning() bool {
 // службы нет и нужно работать локально.
 func (a *guiApp) serviceAction(name string, req guiRequest) (bool, error) {
 	switch name {
-	case "create", "join", "connect", "disconnect":
+	case "create", "join", "connect", "disconnect", "leave":
 	default:
 		return false, nil
 	}
