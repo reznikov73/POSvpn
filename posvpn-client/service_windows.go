@@ -43,13 +43,14 @@ type serviceApp struct {
 }
 
 type pipeRequest struct {
-	Cmd      string `json:"cmd"`
-	Server   string `json:"server,omitempty"`
-	Hub      string `json:"hub,omitempty"`
-	Pin      string `json:"pin,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Password string `json:"password,omitempty"`
-	Node     string `json:"node,omitempty"`
+	Cmd      string          `json:"cmd"`
+	Server   string          `json:"server,omitempty"`
+	Hub      string          `json:"hub,omitempty"`
+	Pin      string          `json:"pin,omitempty"`
+	Name     string          `json:"name,omitempty"`
+	Password string          `json:"password,omitempty"`
+	Node     string          `json:"node,omitempty"`
+	Config   json.RawMessage `json:"config,omitempty"`
 }
 
 type pipeResponse struct {
@@ -199,6 +200,43 @@ func (a *serviceApp) applySettings(req pipeRequest) error {
 	return nil
 }
 
+// importConfig перенимает настройки локального клиента при первом запуске
+// службы: тот же узел, тот же токен, без повторного входа в сеть.
+func (a *serviceApp) importConfig(raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return errors.New("пустой конфиг")
+	}
+	if existing, err := loadConfig(); err == nil && existing.Token != "" {
+		return errors.New("у службы уже есть настройки")
+	}
+
+	var parsed config
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return fmt.Errorf("конфиг не разобран: %w", err)
+	}
+	if parsed.Token == "" || parsed.PrivateKey == "" {
+		return errors.New("в конфиге нет токена или ключа")
+	}
+
+	dir := filepath.Dir(configOverride)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(configOverride, raw, 0o600); err != nil {
+		return fmt.Errorf("запись конфига службы: %w", err)
+	}
+	log.Printf("служба: настройки перенесены из клиента (%s)", parsed.Network)
+
+	// Даём локальному туннелю отпустить адаптер, затем подключаемся сами.
+	go func() {
+		time.Sleep(800 * time.Millisecond)
+		if err := a.connect(); err != nil {
+			log.Printf("служба: после переноса настроек: %v", err)
+		}
+	}()
+	return nil
+}
+
 // serviceStatusInfo сообщает, установлена ли служба и работает ли она.
 // Обычный пользователь имеет право только на запрос состояния.
 func serviceStatusInfo() (installed, running bool) {
@@ -240,6 +278,8 @@ func (a *serviceApp) action(req pipeRequest) error {
 		}, false)
 	case "settings":
 		return a.applySettings(req)
+	case "import":
+		return a.importConfig(req.Config)
 	default:
 		return fmt.Errorf("неизвестная команда %q", req.Cmd)
 	}

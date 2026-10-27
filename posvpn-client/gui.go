@@ -35,6 +35,7 @@ type guiApp struct {
 	session  *tunnelSession
 	starting bool
 	lastErr  string
+	imported bool
 }
 
 type guiState struct {
@@ -152,6 +153,26 @@ func runGUI(autoConnect bool) error {
 func (a *guiApp) State() (string, error) {
 	// Если служба запущена, она владеет туннелем и настройками — берём её состояние.
 	if resp, err := serviceCall(pipeRequest{Cmd: "status"}); err == nil && resp.State != nil {
+		// Локальный туннель больше не нужен: адаптер должен принадлежать службе.
+		if a.session != nil {
+			a.disconnect()
+		}
+
+		// Первый запуск службы: переносим настройки пользователя, чтобы не
+		// входить в сеть заново и не получать 409 на занятое имя.
+		if !resp.State.Configured && !a.imported {
+			a.imported = true
+			if cfg, cfgErr := loadConfig(); cfgErr == nil && cfg.Token != "" {
+				if rawCfg, marshalErr := json.Marshal(cfg); marshalErr == nil {
+					if imported, importErr := serviceCall(pipeRequest{Cmd: "import", Config: rawCfg}); importErr == nil && imported.OK {
+						if again, againErr := serviceCall(pipeRequest{Cmd: "status"}); againErr == nil && again.State != nil {
+							resp = again
+						}
+					}
+				}
+			}
+		}
+
 		raw, err := json.Marshal(resp.State)
 		if err != nil {
 			return "", err
