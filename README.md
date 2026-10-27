@@ -84,6 +84,32 @@ endpoint'ами. Хаб пересылает зашифрованные кадр
 Настройки сохраняются в `%LocalAppData%\POSvpn\server-ui.json`; флаги
 `-listen`/`-hub`, заданные явно, имеют приоритет над файлом.
 
+## Служба
+
+Установщик ставит службу `POSvpn` (LocalSystem, автозапуск). Служба владеет
+адаптером, маршрутами и туннелем, поэтому окно работает без прав
+администратора и без UAC.
+
+| Что | Где |
+|---|---|
+| Настройки службы | `%ProgramData%\POSVpn\client.json` |
+| Журнал службы | `%ProgramData%\POSvpn\logs\service.log` |
+| Канал окно ↔ служба | `\\.\pipe\posvpn`, JSON-строки |
+
+Управление вручную:
+
+```powershell
+.\out\posvpn-client.exe service install     # создать и запустить
+.\out\posvpn-client.exe service status      # состояние в JSON
+.\out\posvpn-client.exe service stop
+.\out\posvpn-client.exe service uninstall
+.\out\posvpn-client.exe service console     # то же без регистрации службы
+```
+
+Если службы нет (например, при запуске из папки `out` без установки), окно
+работает в локальном режиме: поднимает туннель само и просит UAC. Строка
+«Служба: работает» в окне показывает, что адаптером владеет служба.
+
 ## Журналы
 
 Оба компонента пишут журнал в файл:

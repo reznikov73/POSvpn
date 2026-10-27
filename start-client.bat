@@ -9,19 +9,9 @@ if not exist "out\posvpn-client.exe" (
     exit /b 1
 )
 
-rem The virtual adapter needs administrator rights. Re-launch this file elevated.
-fltmc >nul 2>&1
-if errorlevel 1 (
-    echo Requesting administrator rights for the virtual adapter...
-    if "%~1"=="" (
-        powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
-    ) else (
-        powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs"
-    )
-    exit /b
-)
-
 rem Without arguments start the window and release the console.
+rem Права администратора больше не нужны: если служба установлена, она владеет
+rem адаптером; если нет — exe сам запросит UAC.
 if "%~1"=="" (
     start "" "out\posvpn-client.exe"
     exit /b

@@ -51,6 +51,7 @@ type guiState struct {
 	Error      string    `json:"error"`
 	HasWintun  bool      `json:"has_wintun"`
 	Elevated   bool      `json:"elevated"`
+	Service    bool      `json:"service"`
 	LogPath    string    `json:"log_path"`
 	Peers      []guiPeer `json:"peers"`
 }
@@ -138,6 +139,15 @@ func runGUI(autoConnect bool) error {
 
 // State отдаёт в интерфейс всё, что нужно для отрисовки.
 func (a *guiApp) State() (string, error) {
+	// Если служба запущена, она владеет туннелем и настройками — берём её состояние.
+	if resp, err := serviceCall(pipeRequest{Cmd: "status"}); err == nil && resp.State != nil {
+		raw, err := json.Marshal(resp.State)
+		if err != nil {
+			return "", err
+		}
+		return string(raw), nil
+	}
+
 	cfg, _ := loadConfig()
 
 	state := guiState{
@@ -201,6 +211,16 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 		_ = json.Unmarshal([]byte(payload), &req)
 	}
 
+	// Команды, которые может выполнить служба, отправляем ей.
+	if handled, svcErr := a.serviceAction(name, req); handled {
+		resp := map[string]any{"ok": svcErr == nil}
+		if svcErr != nil {
+			resp["error"] = svcErr.Error()
+		}
+		raw, _ := json.Marshal(resp)
+		return string(raw), nil
+	}
+
 	var err error
 	switch name {
 	case "create":
@@ -225,6 +245,58 @@ func (a *guiApp) Action(name, payload string) (string, error) {
 	}
 	raw, _ := json.Marshal(resp)
 	return string(raw), nil
+}
+
+// serviceCall отправляет одну команду службе через named pipe.
+func serviceCall(req pipeRequest) (pipeResponse, error) {
+	file, err := os.OpenFile(pipePath, os.O_RDWR, 0)
+	if err != nil {
+		return pipeResponse{}, err
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(req); err != nil {
+		return pipeResponse{}, err
+	}
+	var resp pipeResponse
+	if err := json.NewDecoder(file).Decode(&resp); err != nil {
+		return pipeResponse{}, err
+	}
+	return resp, nil
+}
+
+// serviceRunning проверяет, отвечает ли служба на localhost-pipe.
+func serviceRunning() bool {
+	resp, err := serviceCall(pipeRequest{Cmd: "status"})
+	return err == nil && resp.OK
+}
+
+// serviceAction отправляет команду службе. handled=false означает, что
+// службы нет и нужно работать локально.
+func (a *guiApp) serviceAction(name string, req guiRequest) (bool, error) {
+	switch name {
+	case "create", "join", "connect", "disconnect":
+	default:
+		return false, nil
+	}
+
+	resp, err := serviceCall(pipeRequest{
+		Cmd:      name,
+		Server:   req.Server,
+		Name:     req.Name,
+		Password: req.Password,
+		Node:     req.Node,
+	})
+	if err != nil {
+		return false, nil
+	}
+	if !resp.OK {
+		if resp.Error == "" {
+			resp.Error = "служба вернула ошибку"
+		}
+		return true, errors.New(resp.Error)
+	}
+	return true, nil
 }
 
 func guiAuth(req guiRequest, create bool) error {

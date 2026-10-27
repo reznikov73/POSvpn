@@ -418,6 +418,7 @@
     </section>
 
     <div class="meta">
+      <div id="modeLine">Режим: —</div>
       <div id="serverLine">Сервер: —</div>
       <div id="hubLine">Хаб: —</div>
     </div>
@@ -570,6 +571,7 @@
     pill.className = 'pill' + (connected ? ' on' : (busy ? ' busy' : ''));
     setText('pill', connected ? 'В сети' : (busy ? 'Подключение…' : (s.configured ? 'Не подключено' : 'Не настроено')));
 
+    setText('modeLine', s.service ? 'Служба: работает' : 'Режим: локальный (нужен администратор)');
     setText('serverLine', 'Сервер: ' + (s.server || '—'));
     setText('hubLine', 'Хаб: ' + (s.hub || (s.server ? 'по адресу сервера' : '—')));
 
@@ -578,7 +580,7 @@
 
     var banner = $('banner');
     var messages = [];
-    if (!s.elevated) messages.push('Нет прав администратора: туннель не поднимется. Запустите start-client.bat.');
+    if (!s.elevated && !s.service) messages.push('Нет прав администратора: туннель не поднимется. Запустите start-client.bat.');
     if (!s.has_wintun) messages.push('Не найден wintun.dll. Положите его рядом с exe или запустите tools\\fetch-wintun.ps1.');
     if (messages.length) {
       banner.textContent = messages.join(' ');
@@ -616,7 +618,7 @@
     }
 
     setText('aboutState', 'Узлов в сети: ' + (peers.length + (s.configured ? 1 : 0)) +
-      ' · индекс: ' + (s.self_index || '—'));
+      ' · индекс: ' + (s.self_index || '—') + ' · ' + (s.service ? 'служба' : 'локальный режим'));
     setText('aboutLog', s.log_path ? 'Журнал: ' + s.log_path : '');
   }
 

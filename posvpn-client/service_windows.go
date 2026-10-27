@@ -1,0 +1,491 @@
+//go:build windows
+
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/netip"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sort"
+	"sync"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
+
+	"posvpn-engine/logx"
+	"posvpn-engine/tunnel"
+)
+
+const (
+	serviceName = "POSvpn"
+	pipePath    = `\\.\pipe\posvpn`
+)
+
+// serviceApp — состояние службы: настройки, туннель и ответы окну.
+type serviceApp struct {
+	mu       sync.Mutex
+	session  *tunnelSession
+	starting bool
+	lastErr  string
+}
+
+type pipeRequest struct {
+	Cmd      string `json:"cmd"`
+	Server   string `json:"server,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Password string `json:"password,omitempty"`
+	Node     string `json:"node,omitempty"`
+}
+
+type pipeResponse struct {
+	OK      bool      `json:"ok"`
+	Error   string    `json:"error,omitempty"`
+	State   *guiState `json:"state,omitempty"`
+	Service bool      `json:"service"`
+}
+
+func programDataDir() string {
+	dir := os.Getenv("ProgramData")
+	if dir == "" {
+		dir = `C:\ProgramData`
+	}
+	return filepath.Join(dir, "POSVpn")
+}
+
+// setupServicePaths переключает настройки и журнал службы на ProgramData.
+func setupServicePaths() {
+	dir := programDataDir()
+	_ = os.MkdirAll(dir, 0o755)
+	configOverride = filepath.Join(dir, "client.json")
+	if path, err := logx.SetupDir(filepath.Join(dir, "logs"), "service"); err == nil {
+		logPath = path
+	}
+}
+
+func (a *serviceApp) snapshot() guiState {
+	cfg, _ := loadConfig()
+	state := guiState{
+		HasWintun: hasWintun(),
+		Elevated:  true,
+		Service:   true,
+		LogPath:   logPath,
+		Peers:     []guiPeer{},
+	}
+	if cfg != nil {
+		state.Configured = cfg.Token != ""
+		state.Server = cfg.Server
+		state.Hub = cfg.Hub
+		state.Network = cfg.Network
+		state.SelfName = cfg.Node
+		state.SelfIP = cfg.IP
+		state.SelfIndex = cfg.Index
+	}
+	if state.SelfName == "" {
+		state.SelfName = hostname()
+	}
+
+	a.mu.Lock()
+	session := a.session
+	state.Starting = a.starting
+	if session == nil && a.lastErr != "" {
+		state.Error = a.lastErr
+	}
+	a.mu.Unlock()
+
+	if session != nil {
+		running, connected, lastErr := session.status()
+		state.Running = running
+		state.Connected = connected
+		state.Error = lastErr
+		for _, peer := range session.peers.all() {
+			state.Peers = append(state.Peers, guiPeer{
+				Name:   peer.name,
+				IP:     peer.ip.String(),
+				Index:  peer.index,
+				Role:   peer.role,
+				Online: peer.online(),
+				RTT:    peer.rtt(),
+			})
+		}
+		sort.Slice(state.Peers, func(i, j int) bool { return state.Peers[i].Index < state.Peers[j].Index })
+	}
+	return state
+}
+
+func (a *serviceApp) connect() error {
+	a.mu.Lock()
+	if a.session != nil {
+		a.mu.Unlock()
+		return errors.New("туннель уже запущен")
+	}
+	if a.starting {
+		a.mu.Unlock()
+		return errors.New("туннель уже подключается")
+	}
+	a.starting = true
+	a.lastErr = ""
+	a.mu.Unlock()
+
+	go func() {
+		session, err := connectFromConfig()
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		a.starting = false
+		if err != nil {
+			a.lastErr = err.Error()
+			log.Printf("служба: туннель не поднят: %v", err)
+			return
+		}
+		a.session = session
+		a.lastErr = ""
+		log.Printf("служба: туннель поднят")
+	}()
+	return nil
+}
+
+func (a *serviceApp) disconnect() {
+	a.mu.Lock()
+	session := a.session
+	a.session = nil
+	a.mu.Unlock()
+	if session != nil {
+		session.Stop()
+	}
+}
+
+func (a *serviceApp) action(req pipeRequest) error {
+	switch req.Cmd {
+	case "connect":
+		return a.connect()
+	case "disconnect":
+		a.disconnect()
+		return nil
+	case "create":
+		return runAuth([]string{
+			"-server", req.Server, "-network", req.Name,
+			"-password", req.Password, "-node", req.Node,
+		}, true)
+	case "join":
+		return runAuth([]string{
+			"-server", req.Server, "-network", req.Name,
+			"-password", req.Password, "-node", req.Node,
+		}, false)
+	default:
+		return fmt.Errorf("неизвестная команда %q", req.Cmd)
+	}
+}
+
+// servePipe принимает подключения окна и отвечает JSON-строками.
+func servePipe(ctx context.Context, app *serviceApp) error {
+	sd, err := windows.SecurityDescriptorFromString("D:(A;;GA;;;AU)")
+	if err != nil {
+		return fmt.Errorf("права на pipe: %w", err)
+	}
+	sa := &windows.SecurityAttributes{
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+		SecurityDescriptor: sd,
+	}
+
+	for ctx.Err() == nil {
+		handle, err := windows.CreateNamedPipe(
+			windows.StringToUTF16Ptr(pipePath),
+			windows.PIPE_ACCESS_DUPLEX,
+			windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT,
+			windows.PIPE_UNLIMITED_INSTANCES,
+			64*1024, 64*1024, 0, sa,
+		)
+		if err != nil {
+			return fmt.Errorf("создание pipe: %w", err)
+		}
+
+		err = windows.ConnectNamedPipe(handle, nil)
+		if err != nil && !errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
+			_ = windows.CloseHandle(handle)
+			continue
+		}
+
+		file := os.NewFile(uintptr(handle), "posvpn-pipe")
+		go handlePipeConn(file, app)
+	}
+	return nil
+}
+
+func handlePipeConn(file *os.File, app *serviceApp) {
+	defer file.Close()
+	decoder := json.NewDecoder(bufio.NewReader(file))
+	encoder := json.NewEncoder(file)
+
+	for {
+		var req pipeRequest
+		if err := decoder.Decode(&req); err != nil {
+			return
+		}
+
+		var actionErr error
+		switch req.Cmd {
+		case "status":
+			// только отдать состояние
+		default:
+			actionErr = app.action(req)
+		}
+
+		state := app.snapshot()
+		resp := pipeResponse{OK: actionErr == nil, Service: true, State: &state}
+		if actionErr != nil {
+			resp.Error = actionErr.Error()
+		}
+		if err := encoder.Encode(resp); err != nil {
+			return
+		}
+	}
+}
+
+// posvpnService — точка входа диспетчера служб Windows.
+type posvpnService struct{}
+
+func (posvpnService) Execute(args []string, requests <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
+	changes <- svc.Status{State: svc.StartPending}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app := &serviceApp{}
+
+	go func() {
+		if cfg, err := loadConfig(); err == nil && cfg.Token != "" {
+			if err := app.connect(); err != nil {
+				log.Printf("служба: автоподключение не удалось: %v", err)
+			}
+		}
+	}()
+	go func() {
+		if err := servePipe(ctx, app); err != nil {
+			log.Printf("служба: pipe остановлен: %v", err)
+		}
+	}()
+
+	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+	for request := range requests {
+		if request.Cmd == svc.Stop || request.Cmd == svc.Shutdown {
+			changes <- svc.Status{State: svc.StopPending}
+			cancel()
+			app.disconnect()
+			return false, 0
+		}
+	}
+	return false, 0
+}
+
+func serviceCommand(args []string) error {
+	if len(args) == 0 {
+		return errors.New("укажите install, uninstall, start, stop или run")
+	}
+	setupServicePaths()
+
+	switch args[0] {
+	case "install":
+		return serviceInstall()
+	case "uninstall":
+		return serviceUninstall()
+	case "start":
+		return serviceControl("start")
+	case "stop":
+		return serviceControl("stop")
+	case "run":
+		log.Printf("служба POSvpn запущена вручную")
+		return svc.Run(serviceName, &posvpnService{})
+	case "console":
+		return runServiceConsole()
+	case "status":
+		return serviceStatus()
+	default:
+		return fmt.Errorf("неизвестная команда службы %q", args[0])
+	}
+}
+
+func serviceInstall() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	manager, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("подключение к диспетчеру служб (нужны права администратора): %w", err)
+	}
+	defer manager.Disconnect()
+
+	if existing, err := manager.OpenService(serviceName); err == nil {
+		defer existing.Close()
+		_ = existing.Start()
+		fmt.Println("Служба POSvpn уже установлена.")
+		return nil
+	}
+
+	service, err := manager.CreateService(serviceName, exe, mgr.Config{
+		DisplayName: "POSvpn",
+		Description: "Виртуальная локальная сеть POSvpn: адаптер, туннель и маршруты",
+		StartType:   mgr.StartAutomatic,
+	}, "service", "run")
+	if err != nil {
+		return fmt.Errorf("создание службы: %w", err)
+	}
+	defer service.Close()
+
+	if err := service.Start(); err != nil {
+		return fmt.Errorf("служба создана, но не запустилась: %w", err)
+	}
+	fmt.Println("Служба POSvpn установлена и запущена.")
+	return nil
+}
+
+func serviceUninstall() error {
+	manager, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("подключение к диспетчеру служб (нужны права администратора): %w", err)
+	}
+	defer manager.Disconnect()
+
+	service, err := manager.OpenService(serviceName)
+	if err != nil {
+		return errors.New("служба POSvpn не установлена")
+	}
+	defer service.Close()
+
+	_, _ = service.Control(svc.Stop)
+	for i := 0; i < 10; i++ {
+		status, err := service.Query()
+		if err != nil || status.State == svc.Stopped {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if err := service.Delete(); err != nil {
+		return fmt.Errorf("удаление службы: %w", err)
+	}
+	fmt.Println("Служба POSvpn удалена.")
+	return nil
+}
+
+func runServiceConsole() error {
+	log.Printf("служба POSvpn: консольный режим, pipe %s", pipePath)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := &serviceApp{}
+	if cfg, err := loadConfig(); err == nil && cfg.Token != "" {
+		if err := app.connect(); err != nil {
+			log.Printf("автоподключение: %v", err)
+		}
+	}
+	go func() {
+		if err := servePipe(ctx, app); err != nil {
+			log.Printf("pipe: %v", err)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+
+	app.disconnect()
+	return nil
+}
+
+// serviceStatus печатает состояние службы — удобно проверять без окна.
+func serviceStatus() error {
+	resp, err := serviceCall(pipeRequest{Cmd: "status"})
+	if err != nil {
+		return fmt.Errorf("служба не отвечает: %w", err)
+	}
+	raw, err := json.MarshalIndent(resp.State, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(raw))
+	return nil
+}
+
+func serviceControl(command string) error {
+	manager, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("подключение к диспетчеру служб: %w", err)
+	}
+	defer manager.Disconnect()
+
+	service, err := manager.OpenService(serviceName)
+	if err != nil {
+		return errors.New("служба POSvpn не установлена")
+	}
+	defer service.Close()
+
+	switch command {
+	case "start":
+		if err := service.Start(); err != nil {
+			return fmt.Errorf("запуск службы: %w", err)
+		}
+		fmt.Println("Служба POSvpn запущена.")
+	case "stop":
+		if _, err := service.Control(svc.Stop); err != nil {
+			return fmt.Errorf("остановка службы: %w", err)
+		}
+		fmt.Println("Служба POSvpn остановлена.")
+	}
+	return nil
+}
+
+// connectFromConfig собирает туннель по сохранённым настройкам.
+func connectFromConfig() (*tunnelSession, error) {
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Token == "" {
+		return nil, errors.New("сначала создайте сеть или войдите в неё")
+	}
+
+	privateKey, err := base64.StdEncoding.DecodeString(cfg.PrivateKey)
+	if err != nil || len(privateKey) != 32 {
+		return nil, errors.New("в настройках нет корректного приватного ключа: войдите в сеть заново")
+	}
+
+	netmap, err := fetchNetMap(cfg)
+	if err != nil {
+		return nil, err
+	}
+	subnet, err := netip.ParsePrefix(netmap.Subnet)
+	if err != nil {
+		return nil, fmt.Errorf("сервер прислал некорректную подсеть %q", netmap.Subnet)
+	}
+
+	hub := cfg.Hub
+	if hub == "" {
+		hub = defaultHubAddr(cfg.Server)
+	}
+
+	return startTunnelSession(tunnelOptions{
+		Server:     cfg.Server,
+		HubAddr:    hub,
+		Token:      cfg.Token,
+		NetworkID:  netmap.NetworkID,
+		Subnet:     subnet,
+		SelfIndex:  netmap.Self.Index,
+		SelfIP:     netmap.Self.IP,
+		PrivateKey: privateKey,
+		Pin:        cfg.HubPin,
+		MTU:        tunnel.DefaultMTU,
+		Adapter:    "POSvpn",
+		NetMap:     netmap,
+	})
+}

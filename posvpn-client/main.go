@@ -27,6 +27,10 @@ import (
 // logPath — файл журнала клиента, показывается в окне.
 var logPath string
 
+// configOverride — путь к настройкам. Служба хранит их в ProgramData,
+// обычный клиент — в профиле пользователя.
+var configOverride string
+
 const defaultServer = "http://127.0.0.1:8787"
 
 // config — локальное состояние клиента. Приватный ключ узла никогда не уходит
@@ -51,8 +55,9 @@ func main() {
 		logPath = path
 	}
 	if len(os.Args) < 2 {
-		// Без аргументов — окно. Если прав мало, exe сам перезапустится через UAC.
-		if !isElevated() {
+		// Без аргументов — окно. Если служба уже работает, права администратора
+		// не нужны: адаптером владеет служба.
+		if !isElevated() && !serviceRunning() {
 			if err := relaunchElevated([]string{"gui"}); err == nil {
 				return
 			}
@@ -73,7 +78,7 @@ func main() {
 	case "status", "peers":
 		err = runStatus(os.Args[2:])
 	case "gui":
-		if !isElevated() {
+		if !isElevated() && !serviceRunning() {
 			relaunchArgs := append([]string{"gui"}, os.Args[2:]...)
 			if err := relaunchElevated(relaunchArgs); err == nil {
 				return
@@ -89,6 +94,8 @@ func main() {
 	case "wizard":
 		runWizard()
 		return
+	case "service":
+		err = serviceCommand(os.Args[2:])
 	case "up":
 		err = runUp(os.Args[2:])
 	case "down":
@@ -116,6 +123,7 @@ func usage() {
   posvpn-client status
   posvpn-client up    [-hub <адрес>] [-pin <отпечаток>] [-mtu <n>] [-adapter <имя>]
   posvpn-client down  [-adapter <имя>]
+  posvpn-client service install|uninstall|start|stop|status|console|run
 `)
 }
 
@@ -286,6 +294,9 @@ func call(method, url, token string, body, out any) error {
 }
 
 func configPath() (string, error) {
+	if configOverride != "" {
+		return configOverride, nil
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil || dir == "" {
 		// В службе и в урезанном окружении %AppData% может отсутствовать.

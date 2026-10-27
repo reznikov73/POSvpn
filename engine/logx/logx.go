@@ -34,7 +34,11 @@ func Setup(component string) (string, error) {
 			dir = os.TempDir()
 		}
 	}
-	dir = filepath.Join(dir, "POSvpn", "logs")
+	return SetupDir(filepath.Join(dir, "POSvpn", "logs"), component)
+}
+
+// SetupDir открывает журнал в заданном каталоге. Служба пишет в ProgramData.
+func SetupDir(dir, component string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("каталог журналов: %w", err)
 	}
