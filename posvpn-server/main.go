@@ -39,6 +39,7 @@ type serverApp struct {
 	keyFile      string
 	settingsFile string
 	tlsSelf      bool
+	certPath     string
 
 	mu           sync.Mutex
 	running      bool
@@ -172,7 +173,7 @@ func (a *serverApp) HubAddr() string {
 
 // UpdateEndpoints применяет новые адреса: останавливает сервер, меняет
 // настройки и поднимает снова. Если новый адрес занят, возвращает прежние.
-func (a *serverApp) UpdateEndpoints(listen, hub string) error {
+func (a *serverApp) UpdateSettings(listen, hub string, tlsSelf bool) error {
 	listen = strings.TrimSpace(listen)
 	hub = strings.TrimSpace(hub)
 	if listen == "" {
@@ -188,12 +189,12 @@ func (a *serverApp) UpdateEndpoints(listen, hub string) error {
 	}
 
 	a.mu.Lock()
-	oldListen, oldHub, wasRunning := a.listen, a.hubAddr, a.running
+	oldListen, oldHub, oldTLS, wasRunning := a.listen, a.hubAddr, a.tlsSelf, a.running
 	a.mu.Unlock()
 
 	a.Stop()
 	a.mu.Lock()
-	a.listen, a.hubAddr = listen, hub
+	a.listen, a.hubAddr, a.tlsSelf = listen, hub, tlsSelf
 	a.mu.Unlock()
 
 	if !wasRunning {
@@ -201,13 +202,21 @@ func (a *serverApp) UpdateEndpoints(listen, hub string) error {
 	}
 	if err := a.Start(); err != nil {
 		a.mu.Lock()
-		a.listen, a.hubAddr = oldListen, oldHub
+		a.listen, a.hubAddr, a.tlsSelf = oldListen, oldHub, oldTLS
 		a.mu.Unlock()
 		_ = a.Start()
 		return fmt.Errorf("не удалось применить: %v (вернули %s и %s)", err, oldListen, oldHub)
 	}
 	return nil
 }
+
+func (a *serverApp) TLS() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.tlsSelf
+}
+
+func (a *serverApp) CertificatePath() string { return a.certPath }
 
 func (a *serverApp) StartupError() string {
 	a.mu.Lock()
@@ -247,7 +256,7 @@ func main() {
 	guiFlag := flag.Bool("gui", defaultGUIFlag(), "открыть окно сервера (Windows)")
 	consoleFlag := flag.Bool("console", false, "работать без окна: служба, VPS, отладка")
 	minimized := flag.Bool("minimized", false, "запустить свёрнутым в трей")
-	tlsSelf := flag.Bool("tls", false, "HTTPS для control-API на сертификате хаба (клиентам нужен -pin)")
+	tlsSelf := flag.Bool("tls", saved.TLS, "HTTPS для control-API на сертификате хаба (клиентам нужен -pin)")
 	flag.Parse()
 
 	resolvedStore := resolveStorePath(*storePath)
@@ -256,11 +265,13 @@ func main() {
 		log.Fatalf("состояние не загружено: %v", err)
 	}
 
-	cert, err := tunnel.LoadOrCreateCertificate(certificateDir(resolvedStore))
+	certDir := certificateDir(resolvedStore)
+	cert, err := tunnel.LoadOrCreateCertificate(certDir)
 	if err != nil {
 		log.Fatalf("сертификат хаба: %v", err)
 	}
 	fingerprint := tunnel.Fingerprint(cert.Certificate[0])
+	certPath := filepath.Join(certDir, "hub-cert.pem")
 
 	app := &serverApp{
 		store:        store,
@@ -274,6 +285,7 @@ func main() {
 		keyFile:      *keyFile,
 		settingsFile: settingsFile,
 		tlsSelf:      *tlsSelf,
+		certPath:     certPath,
 	}
 
 	log.Printf("отпечаток сертификата хаба: %s", fingerprint)

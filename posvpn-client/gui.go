@@ -223,7 +223,7 @@ func runGUI(autoConnect, minimized bool) error {
 		if dialog == "settings" {
 			call = "openSettings()"
 		}
-		w.Init("window.addEventListener('load', function(){ setTimeout(function(){ try { " + call + "; } catch (e) {} }, 300); });")
+		w.Init("window.addEventListener('load', function(){ setTimeout(function(){ try { " + call + "; } catch (e) {} }, 900); });")
 		w.SetHtml(guiHTML)
 	}
 

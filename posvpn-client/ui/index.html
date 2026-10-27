@@ -521,6 +521,10 @@
       <label for="setHub">Хаб (пусто — тот же хост, порт 8788)</label>
       <input id="setHub" placeholder="авто" autocomplete="off">
     </div>
+    <label style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;font-size:13px">
+      <input type="checkbox" id="setTls" style="width:15px;height:15px"> Подключаться по HTTPS
+    </label>
+    <p class="hint">Сервер должен быть запущен с флагом -tls. Для самоподписанного сертификата обязателен отпечаток ниже.</p>
 
     <div class="section-title">Безопасность</div>
     <div class="field">
@@ -714,6 +718,7 @@
     setText('setSvcState', STATE.service_running ? 'работает' : (STATE.service_installed ? 'остановлена' : 'не установлена'));
     $('setServer').value = STATE.server || '';
     $('setHub').value = STATE.hub || '';
+    $('setTls').checked = (STATE.server || '').indexOf('https://') === 0;
     $('setPin').value = STATE.hub_pin || '';
     $('settingsError').style.display = 'none';
     openModal('settingsModal');
@@ -788,10 +793,23 @@
   });
 
   $('settingsSave').addEventListener('click', async function () {
+    var server = $('setServer').value.trim();
+    var useTLS = $('setTls').checked;
+    if (server) {
+      if (useTLS && server.indexOf('http://') === 0) server = 'https://' + server.slice(7);
+      if (!useTLS && server.indexOf('https://') === 0) server = 'http://' + server.slice(8);
+    }
+    var pin = $('setPin').value.trim();
+    if (useTLS && !pin) {
+      $('settingsError').textContent = 'Для HTTPS нужен отпечаток сертификата';
+      $('settingsError').style.display = 'block';
+      return;
+    }
+
     var res = await act('settings', {
-      server: $('setServer').value.trim(),
+      server: server,
       hub: $('setHub').value.trim(),
-      pin: $('setPin').value.trim()
+      pin: pin
     });
     if (res.ok) {
       $('settingsModal').classList.remove('show');

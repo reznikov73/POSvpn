@@ -33,6 +33,7 @@ type serverGUI struct {
 type settingsRequest struct {
 	Listen string `json:"listen"`
 	Hub    string `json:"hub"`
+	TLS    bool   `json:"tls"`
 }
 
 type srvState struct {
@@ -44,6 +45,8 @@ type srvState struct {
 	Store       string        `json:"store"`
 	Log         string        `json:"log"`
 	Error       string        `json:"error"`
+	TLS         bool          `json:"tls"`
+	CertPath    string        `json:"cert_path"`
 	LocalOnly   bool          `json:"local_only"`
 	Networks    []NetworkView `json:"networks"`
 	Nodes       int           `json:"nodes"`
@@ -186,6 +189,8 @@ func (g *serverGUI) State() (string, error) {
 		Store:       g.app.storePath,
 		Log:         g.app.logPath,
 		Error:       g.app.StartupError(),
+		TLS:         g.app.TLS(),
+		CertPath:    g.app.CertificatePath(),
 		LocalOnly:   localOnlyListen(g.app.ListenAddr()),
 		Networks:    g.app.store.Snapshot(time.Now()),
 	}
@@ -224,13 +229,14 @@ func (g *serverGUI) Action(name, payload string) (string, error) {
 			err = fmt.Errorf("настройки: %w", parseErr)
 			break
 		}
-		if applyErr := g.app.UpdateEndpoints(req.Listen, req.Hub); applyErr != nil {
+		if applyErr := g.app.UpdateSettings(req.Listen, req.Hub, req.TLS); applyErr != nil {
 			err = applyErr
 			break
 		}
 		err = saveUISettings(g.app.settingsFile, uiSettings{
 			Listen: g.app.ListenAddr(),
 			Hub:    g.app.HubAddr(),
+			TLS:    g.app.TLS(),
 		})
 	case "quit":
 		g.app.Stop()

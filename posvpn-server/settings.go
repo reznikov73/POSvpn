@@ -13,6 +13,7 @@ import (
 type uiSettings struct {
 	Listen string `json:"listen,omitempty"`
 	Hub    string `json:"hub,omitempty"`
+	TLS    bool   `json:"tls,omitempty"`
 }
 
 // settingsPath — файл настроек окна рядом с журналами.
