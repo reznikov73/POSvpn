@@ -475,6 +475,7 @@
       <div id="serverLine">Сервер: —</div>
       <div id="hubLine">Хаб: —</div>
       <div id="proxyLine" style="display:none">Прокси: —</div>
+      <div id="gatewayLine" style="display:none">Шлюз: —</div>
     </div>
 
     <section class="net">
@@ -569,6 +570,10 @@
           <button class="btn small" id="copyProxy" type="button">Копировать</button>
         </div>
       </div>
+
+      <div class="section-title">Шлюз в интернет (NAT)</div>
+      <label class="check"><input type="checkbox" id="setGatewayOn"> Раздавать интернет всей сети через этот ПК</label>
+      <p class="hint">Нужны Windows Pro/Enterprise (WinNAT) и права администратора. NAT включается вместе с туннелем и снимается при отключении. На Windows Home недоступен — там используйте прокси.</p>
 
       <div class="form-error" id="settingsError"></div>
     </div>
@@ -692,6 +697,17 @@
     } else {
       proxyLine.style.display = 'none';
     }
+    var gatewayLine = $('gatewayLine');
+    if (s.gateway_enabled) {
+      var gwPrefix = s.gateway_prefix || 'подсеть сети';
+      var gwSuffix = ' (включится с туннелем)';
+      if (s.nat_error) gwSuffix = ' (ошибка: ' + s.nat_error + ')';
+      else if (s.nat_active) gwSuffix = ' (NAT включён)';
+      gatewayLine.textContent = 'Шлюз: ' + gwPrefix + gwSuffix;
+      gatewayLine.style.display = 'block';
+    } else {
+      gatewayLine.style.display = 'none';
+    }
 
     setText('netName', s.network || 'Сеть не выбрана');
     setText('netCount', connected && peers.length ? String(peers.length + 1) + ' уч.' : '');
@@ -785,6 +801,7 @@
     $('setTls').checked = (STATE.server || '').indexOf('https://') === 0;
     $('setPin').value = STATE.hub_pin || '';
     $('setProxyOn').checked = !!STATE.proxy_enabled;
+    $('setGatewayOn').checked = !!STATE.gateway_enabled;
     $('setProxyPort').value = STATE.proxy_port || 1080;
     $('setProxyUser').value = STATE.proxy_user || '';
     $('setProxyPass').value = STATE.proxy_pass || '';
@@ -920,7 +937,8 @@
       proxy_enabled: $('setProxyOn').checked,
       proxy_port: proxyPort,
       proxy_user: $('setProxyUser').value.trim(),
-      proxy_pass: $('setProxyPass').value
+      proxy_pass: $('setProxyPass').value,
+      gateway_enabled: $('setGatewayOn').checked
     });
     if (res.ok) {
       $('settingsModal').classList.remove('show');

@@ -71,6 +71,12 @@ type guiState struct {
 	ProxyUser    string `json:"proxy_user"`
 	ProxyPass    string `json:"proxy_pass"`
 	ProxyAddr    string `json:"proxy_addr"`
+
+	// Шлюз: узел раздаёт интернет всей сети через системный NAT.
+	GatewayEnabled bool   `json:"gateway_enabled"`
+	GatewayPrefix  string `json:"gateway_prefix"`
+	NATActive      bool   `json:"nat_active"`
+	NATError       string `json:"nat_error"`
 }
 
 type guiPeer struct {
@@ -96,6 +102,8 @@ type guiRequest struct {
 	ProxyUser    string `json:"proxy_user"`
 	ProxyPass    string `json:"proxy_pass"`
 	Text         string `json:"text"`
+
+	GatewayEnabled bool `json:"gateway_enabled"`
 }
 
 // guiLog пишет строку в тот же журнал, что и JS-ошибки.
@@ -365,6 +373,11 @@ func (a *guiApp) collectState() guiState {
 		if cfg.ProxyEnabled {
 			state.ProxyAddr = proxyAddress(cfg.IP, cfg.ProxyPort)
 		}
+		state.GatewayEnabled = cfg.GatewayEnabled
+		natActive, natPrefix, natErr := natSnapshot()
+		state.NATActive = natActive
+		state.GatewayPrefix = natPrefix
+		state.NATError = natErr
 	}
 	state.ServiceInstalled, state.ServiceRunning = serviceStatusInfo()
 	if state.SelfName == "" {
@@ -552,6 +565,8 @@ func (a *guiApp) applySettings(req guiRequest) (bool, error) {
 		ProxyPort:    req.ProxyPort,
 		ProxyUser:    req.ProxyUser,
 		ProxyPass:    req.ProxyPass,
+
+		GatewayEnabled: req.GatewayEnabled,
 	}); err == nil {
 		if !resp.OK {
 			if resp.Error == "" {
@@ -575,6 +590,7 @@ func (a *guiApp) applySettings(req guiRequest) (bool, error) {
 	cfg.Hub = strings.TrimSpace(req.Hub)
 	cfg.HubPin = strings.TrimSpace(req.Pin)
 	applyProxySettings(cfg, req)
+	cfg.GatewayEnabled = req.GatewayEnabled
 	if err := saveConfig(cfg); err != nil {
 		return false, err
 	}

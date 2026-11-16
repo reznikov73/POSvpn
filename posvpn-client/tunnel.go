@@ -36,6 +36,9 @@ type tunnelOptions struct {
 	ProxyPort    int
 	ProxyUser    string
 	ProxyPass    string
+
+	// Шлюз на этом узле: пакеты всей сети выходят в интернет через NAT.
+	GatewayEnabled bool
 }
 
 // tunnelOptionsFromConfig собирает опции туннеля в одном месте.
@@ -65,6 +68,8 @@ func tunnelOptionsFromConfig(cfg *config, netmap engine.NetMap, subnet netip.Pre
 		ProxyPort:    cfg.ProxyPort,
 		ProxyUser:    cfg.ProxyUser,
 		ProxyPass:    cfg.ProxyPass,
+
+		GatewayEnabled: cfg.GatewayEnabled,
 	}
 }
 
@@ -315,6 +320,31 @@ func runSession(ctx context.Context, opt tunnelOptions, device packetDevice, pee
 		log.Printf("прокси не запущен: %v", err)
 	} else if proxy != nil {
 		defer func() { _ = proxy.Close() }()
+	}
+
+	// Шлюз (NAT) — тоже на время сеанса: включили галочку и туннель, значит
+	// узел раздаёт интернет. Объект NAT снимается при отключении.
+	if opt.GatewayEnabled {
+		if err := ensureNAT(opt.Subnet, opt.Adapter); err != nil {
+			log.Printf("шлюз не включён: %v", err)
+		} else {
+			log.Printf("шлюз включён: NAT %s", opt.Subnet)
+			defer func() {
+				if err := removeNAT(); err != nil {
+					log.Printf("шлюз: %v", err)
+				}
+			}()
+		}
+	} else {
+		// Галочка снята, а объект мог остаться от прошлого запуска (сбой,
+		// выключение питания): узел не должен молча раздавать интернет.
+		go func() {
+			if info, err := natStatus(); err == nil && info.Present {
+				if err := removeNAT(); err != nil {
+					log.Printf("шлюз: %v", err)
+				}
+			}
+		}()
 	}
 
 	go func() { errCh <- sendLoop(ctx, device, peers, &current, opt) }()

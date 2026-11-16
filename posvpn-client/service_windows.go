@@ -60,6 +60,8 @@ type pipeRequest struct {
 	ProxyPort    int    `json:"proxy_port,omitempty"`
 	ProxyUser    string `json:"proxy_user,omitempty"`
 	ProxyPass    string `json:"proxy_pass,omitempty"`
+
+	GatewayEnabled bool `json:"gateway_enabled,omitempty"`
 }
 
 type pipeResponse struct {
@@ -123,6 +125,11 @@ func (a *serviceApp) snapshot() guiState {
 		if cfg.ProxyEnabled {
 			state.ProxyAddr = proxyAddress(cfg.IP, cfg.ProxyPort)
 		}
+		state.GatewayEnabled = cfg.GatewayEnabled
+		natActive, natPrefix, natErr := natSnapshot()
+		state.NATActive = natActive
+		state.GatewayPrefix = natPrefix
+		state.NATError = natErr
 	}
 	state.ServiceInstalled = true
 	state.ServiceRunning = true
@@ -225,6 +232,7 @@ func (a *serviceApp) applySettings(req pipeRequest) error {
 	if cfg.ProxyUser == "" {
 		cfg.ProxyPass = ""
 	}
+	cfg.GatewayEnabled = req.GatewayEnabled
 	if err := saveConfig(cfg); err != nil {
 		return err
 	}

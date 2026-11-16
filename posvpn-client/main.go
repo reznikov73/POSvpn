@@ -55,6 +55,10 @@ type config struct {
 	ProxyPort    int    `json:"proxy_port,omitempty"`
 	ProxyUser    string `json:"proxy_user,omitempty"`
 	ProxyPass    string `json:"proxy_pass,omitempty"`
+
+	// Шлюз: узел выпускает трафик всей сети в интернет через системный NAT.
+	// Требует WinNAT (Windows Pro/Enterprise) и прав администратора.
+	GatewayEnabled bool `json:"gateway_enabled,omitempty"`
 }
 
 func main() {
