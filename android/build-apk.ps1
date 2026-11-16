@@ -28,11 +28,23 @@ if (-not $bash) {
 }
 if (-not $bash) { throw 'bash.exe не найден: установите Git for Windows' }
 
-# Пути берём из переменных окружения, а если их нет — ищем в обычных местах.
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $env:SDK }
+# Переменные читаем из процесса, а если VS Code запущен давно и не видит свежих
+# значений — из профиля пользователя и из системы.
+function Get-Setting([string]$name) {
+    foreach ($scope in 'Process', 'User', 'Machine') {
+        $value = [Environment]::GetEnvironmentVariable($name, $scope)
+        if ($value) { return $value }
+    }
+    return ''
+}
+
+$sdk = Get-Setting 'ANDROID_HOME'
+if (-not $sdk) { $sdk = Get-Setting 'SDK' }
 if (-not $sdk) { $sdk = Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
 
-$jdk = if ($env:JAVA_HOME) { $env:JAVA_HOME } else { $env:JDK }
+$jdk = Get-Setting 'JAVA_HOME'
+if (-not $jdk) { $jdk = Get-Setting 'JDK' }
+if (-not $jdk) { $jdk = '' }
 if (-not $jdk) {
     $jdk = @(
         (Get-ChildItem 'C:\Program Files\Eclipse Adoptium\jdk-*' -Directory -ErrorAction SilentlyContinue |
@@ -42,7 +54,7 @@ if (-not $jdk) {
     ) | Where-Object { $_ } | Select-Object -First 1
 }
 
-$ndk = $env:ANDROID_NDK_HOME
+$ndk = Get-Setting 'ANDROID_NDK_HOME'
 if (-not $ndk -and $sdk) {
     $ndk = (Get-ChildItem (Join-Path $sdk 'ndk') -Directory -ErrorAction SilentlyContinue |
         Sort-Object Name -Descending | Select-Object -First 1).FullName
@@ -74,9 +86,9 @@ $lines = @(
     "export ANDROID_NDK_HOME='$ndk'"
     'export PATH="/c/ProgramData/chocolatey/bin:$PATH"'
 )
-if ($env:GOCACHE) {
-    $lines += "export GOCACHE='$(ConvertTo-Msys $env:GOCACHE)'"
-}
+# GOCACHE нужен gomobile: в чистом окружении задачи его может не быть.
+$gocache = if ($env:GOCACHE) { $env:GOCACHE } else { Join-Path $env:TEMP 'posvpn-gocache' }
+$lines += "export GOCACHE='$(ConvertTo-Msys $gocache)'"
 if ($Version) { $lines += "export VERSION_NAME='$Version'" }
 if ($Code) { $lines += "export VERSION_CODE='$Code'" }
 
