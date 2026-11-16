@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Логотип: зелёный щит с туннелем-соединением. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Щит -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,16 L84,27 L84,50 C84,68 72,82 54,92 C36,82 24,68 24,50 L24,27 Z" />
+    <!-- Туннель: две точки и линия -->
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M42,52 m-5,0 a5,5 0 1,1 10,0 a5,5 0 1,1 -10,0" />
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M66,52 m-5,0 a5,5 0 1,1 10,0 a5,5 0 1,1 -10,0" />
+    <path
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="4"
+        android:pathData="M45,52 L63,52" />
+    <path
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="4"
+        android:pathData="M54,44 L54,60" />
+</vector>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#101418</color>
+    <color name="surface">#1A2129</color>
+    <color name="surface_variant">#232C37</color>
+    <color name="accent">#4CAF50</color>
+    <color name="accent_dark">#2E7D32</color>
+    <color name="text_primary">#ECEFF1</color>
+    <color name="text_secondary">#90A4AE</color>
+    <color name="online">#4CAF50</color>
+    <color name="offline">#78909C</color>
+    <color name="error">#EF5350</color>
+    <color name="ic_launcher_bg">#2E7D32</color>
+</resources>

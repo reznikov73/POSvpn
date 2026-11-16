@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Малая иконка уведомления: белый щит. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2 L20,5 L20,11 C20,16 17,20 12,22 C7,20 4,16 4,11 L4,5 Z M12,8 A1.6,1.6 0 1,0 12,11.2 A1.6,1.6 0 1,0 12,8 Z M8,12.5 L10.5,12.5 L11.2,14 L12.8,14 L13.5,12.5 L16,12.5 L13.5,17 L10.5,17 Z" />
+</vector>
