@@ -2,12 +2,29 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Сервер координации",
+      "name": "Сервер: окно",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/posvpn-server",
-      "args": ["-listen", "127.0.0.1:8787", "-store", "${workspaceFolder}/out/server.json"]
+      "args": []
+    },
+    {
+      "name": "Сервер: консоль",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/posvpn-server",
+      "console": "integratedTerminal",
+      "args": ["-console", "-listen", "127.0.0.1:8787", "-store", "${workspaceFolder}/out/server.json"]
+    },
+    {
+      "name": "Клиент: окно",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/posvpn-client",
+      "args": ["gui"]
     },
     {
       "name": "Клиент: статус",
@@ -15,7 +32,17 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/posvpn-client",
+      "console": "integratedTerminal",
       "args": ["status"]
+    },
+    {
+      "name": "Клиент: туннель (нужен администратор)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/posvpn-client",
+      "console": "integratedTerminal",
+      "args": ["up", "-adapter", "POSvpn-debug"]
     }
   ]
 }

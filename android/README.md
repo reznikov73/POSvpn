@@ -95,6 +95,7 @@
 SDK=$HOME/android-sdk JDK=$HOME/jdk ANDROID_NDK_HOME=$SDK/android-ndk-r27c ./android/build-apk.sh
 # → android/android/out/POSvpn-0.9.7.apk
 ```
+На Windows то же самое делает обёртка `android\build-apk.ps1`: она находит Git Bash, SDK, JDK и NDK (переменные `ANDROID_HOME`, `JAVA_HOME`, `ANDROID_NDK_HOME`) и запускает скрипт.
 
 Два шага, каждый можно запускать отдельно:
 

@@ -129,6 +129,21 @@ Windows могут не находиться автоматически — по
 Требования: Go 1.27+, Inno Setup 6 для установщика. Android собирается
 отдельно: [android/README.md](android/README.md).
 
+### VS Code: задачи и отладка
+
+В репозитории уже лежат `.vscode/tasks.json` и `.vscode/launch.json`:
+
+| Задача (Ctrl+Shift+B) | Что делает |
+|---|---|
+| `build: all` | оба exe (по умолчанию) |
+| `build: server` | только `out\posvpn-server.exe` |
+| `build: client` | только `out\posvpn-client.exe` |
+| `build: apk` | APK через `android\build-apk.ps1` |
+
+Тесты: `test: engine`, `test: server`, `test: client`. Отладка (F5): сервер
+(окно или консоль), клиент (окно, статус, туннель). Для `build: apk` один раз
+задайте `ANDROID_HOME`, `JAVA_HOME` и `ANDROID_NDK_HOME`.
+
 ## Статус
 
 `0.9.3` — рабочий туннель, окно и служба Windows, трей, установщик с HTTPS и

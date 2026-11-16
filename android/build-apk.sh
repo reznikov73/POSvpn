@@ -11,6 +11,9 @@
 #   SDK=$HOME/android-sdk JDK=$HOME/jdk ANDROID_NDK_HOME=$SDK/android-ndk-r27c ./build-apk.sh
 set -euo pipefail
 cd "$(dirname "$0")"
+# android/go — отдельный модуль, его нет в корневом go.work. Без этого gomobile
+# работает в режиме рабочего пространства и не находит golang.org/x/mobile.
+export GOWORK=off
 
 export SDK="${SDK:-$HOME/android-sdk}"
 export JDK="${JDK:-$HOME/jdk}"
@@ -42,4 +45,4 @@ echo "== 2/2 Приложение (android/build.sh)"
 )
 
 echo ""
-echo "Готово. APK: android/out/POSvpn-<версия>.apk"
+echo "Готово. APK: android/android/out/POSvpn-<версия>.apk"

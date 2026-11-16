@@ -2,6 +2,41 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "build: all",
+      "type": "shell",
+      "command": "pwsh -NoProfile -File ./build.ps1",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "build: server",
+      "type": "shell",
+      "command": "pwsh -NoProfile -File ./build.ps1 -Target server",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "build: client",
+      "type": "shell",
+      "command": "pwsh -NoProfile -File ./build.ps1 -Target client",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "build: apk",
+      "type": "shell",
+      "command": "pwsh -NoProfile -File ./android/build-apk.ps1",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
       "label": "test: engine",
       "type": "shell",
       "command": "go test ./...",
@@ -18,12 +53,11 @@
       "problemMatcher": ["$go"]
     },
     {
-      "label": "build: all",
+      "label": "test: client",
       "type": "shell",
-      "command": "pwsh -NoProfile -File ./build.ps1",
-      "options": { "cwd": "${workspaceFolder}" },
-      "group": { "kind": "build", "isDefault": true },
-      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "command": "go test ./...",
+      "options": { "cwd": "${workspaceFolder}/posvpn-client" },
+      "group": "test",
       "problemMatcher": ["$go"]
     },
     {

@@ -1,5 +1,11 @@
-﻿# Сборка обоих бинарников POSvpn.
-# Запуск: .\build.ps1   или из VS Code: задача «build: all».
+﻿# Сборка бинарников POSvpn: оба, только сервер или только клиент.
+# Запуск: .\build.ps1 [-Target all|server|client]
+# Из VS Code: задачи «build: all», «build: server», «build: client».
+
+param(
+    [ValidateSet('all', 'server', 'client')]
+    [string]$Target = 'all'
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -27,6 +33,11 @@ $targets = @(
     @{ Name = 'posvpn-server'; Path = './posvpn-server' },
     @{ Name = 'posvpn-client'; Path = './posvpn-client' }
 )
+
+switch ($Target) {
+    'server' { $targets = @($targets | Where-Object { $_.Name -eq 'posvpn-server' }) }
+    'client' { $targets = @($targets | Where-Object { $_.Name -eq 'posvpn-client' }) }
+}
 
 $failed = @()
 foreach ($t in $targets) {
