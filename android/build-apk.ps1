@@ -1,4 +1,4 @@
-﻿# Обёртка для Windows: готовит окружение и запускает android/build-apk.sh в Git Bash.
+# Обёртка для Windows: готовит окружение и запускает android/build-apk.sh в Git Bash.
 #
 # Что нужно заранее:
 #   - Git for Windows (bash.exe);
@@ -84,7 +84,8 @@ $lines = @(
     "export JDK='$(ConvertTo-Msys $jdk)'"
     # NDK читает gomobile.exe, поэтому путь остаётся windows-ным.
     "export ANDROID_NDK_HOME='$ndk'"
-    'export PATH="/c/ProgramData/chocolatey/bin:$PATH"'
+    # javac и keytool gomobile ищет в PATH: bin JDK идёт первым.
+    "export PATH=`"$(ConvertTo-Msys (Join-Path $jdk 'bin')):/c/ProgramData/chocolatey/bin:`$PATH`""
 )
 # GOCACHE нужен gomobile: в чистом окружении задачи его может не быть.
 $gocache = if ($env:GOCACHE) { $env:GOCACHE } else { Join-Path $env:TEMP 'posvpn-gocache' }

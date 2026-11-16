@@ -11,11 +11,22 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+# Windows (Git Bash): инструменты лежат как *.exe, а javac в classpath ждёт «;».
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) WIN=1; CP_SEP=';' ;;
+    *) WIN=0; CP_SEP=':' ;;
+esac
 
 SDK="${SDK:-$HOME/android-sdk}"
 JDK="${JDK:-$HOME/jdk}"
 BT="${BT:-$SDK/build-tools-35}"
 PLATFORM="$SDK/platforms/android-33/android.jar"
+# javac и d8 — windows-ные программы: путь к android.jar им нужен в виде C:/…
+if [ "$WIN" = 1 ] && command -v cygpath >/dev/null 2>&1; then
+    PLATFORM_ARG="$(cygpath -m "$PLATFORM")"
+else
+    PLATFORM_ARG="$PLATFORM"
+fi
 AAR="libs/posvpn.aar"
 OUT="out"
 NAME="POSvpn"
@@ -24,11 +35,6 @@ VERSION_NAME="${VERSION_NAME:-0.9.7}"
 MIN_SDK=26
 TARGET_SDK=33
 
-# Windows (Git Bash): инструменты лежат как *.exe, а javac в classpath ждёт «;».
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) WIN=1; CP_SEP=';' ;;
-    *) WIN=0; CP_SEP=':' ;;
-esac
 
 # tool <каталог> <имя> — путь к инструменту, на Windows с расширением .exe.
 tool() {
@@ -84,18 +90,24 @@ rm -rf build/aar && mkdir -p build/aar
 unzip -q -o "$AAR" classes.jar -d build/aar
 find build/gen -name "*.java" > build/sources.txt
 find java -name "*.java" >> build/sources.txt
-"$JAVAC" \
-    --release 8 -encoding UTF-8 \
-    -classpath "build/aar/classes.jar${CP_SEP}$PLATFORM" \
-    -d build/classes \
-    @build/sources.txt 2>&1 | grep -v "obsolete" || true
+# Параметры уходят в argfile: в Git Bash строка classpath с «;» искажается
+# при передаче аргументом, а из файла javac читает её как есть.
+{
+    echo "--release 8"
+    echo "-encoding UTF-8"
+    echo "-classpath build/aar/classes.jar${CP_SEP}$PLATFORM_ARG"
+    echo "-d build/classes"
+    cat build/sources.txt
+} > build/javac.args
+"$JAVAC" @build/javac.args > build/javac.log 2>&1 || { cat build/javac.log; echo "javac: ошибки компиляции" >&2; exit 1; }
+grep -v "obsolete" build/javac.log || true
 
 echo "== 4/7 dex (d8)"
 "$JAR" cf build/app-classes.jar -C build/classes .
 "$D8" \
     --release \
     --min-api "$MIN_SDK" \
-    --lib "$PLATFORM" \
+    --lib "$PLATFORM_ARG" \
     --classpath build/aar/classes.jar \
     --output build/dex \
     build/app-classes.jar \
