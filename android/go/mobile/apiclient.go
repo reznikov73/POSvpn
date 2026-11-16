@@ -55,6 +55,9 @@ type config struct {
         Index      uint32 `json:"index,omitempty"`
         PublicKey  string `json:"public_key"`
         PrivateKey string `json:"private_key"`
+        // Password — пароль сети, чтобы не вводить его при каждом входе.
+        // Хранится в приватном каталоге приложения (0600, без бэкапа).
+        Password   string `json:"password,omitempty"`
         // Gateway — IP участника сети, через который этот узел выходит в
         // интернет (пусто = трафик вне подсети отбрасывается).
         Gateway string `json:"gateway,omitempty"`
@@ -70,6 +73,8 @@ type configInfo struct {
         IP      string `json:"ip"`
         Index   uint32 `json:"index"`
         Gateway string `json:"gateway,omitempty"`
+        // Password отдаётся в UI, чтобы поле было заполнено при открытии настроек.
+        Password string `json:"password,omitempty"`
         Joined  bool   `json:"joined"`
 }
 
@@ -205,6 +210,7 @@ func auth(server, hub, hubPin, network, password, nodeName string, create bool) 
         cfg.IP = resp.NetMap.Self.IP
         cfg.Index = resp.NetMap.Self.Index
         cfg.Node = nodeName
+        cfg.Password = password
         return saveConfig(cfg)
 }
 
@@ -228,6 +234,7 @@ func leaveNetwork() error {
         cfg.IP = ""
         cfg.Index = 0
         cfg.NodeID = ""
+        cfg.Password = ""
         return saveConfig(cfg)
 }
 

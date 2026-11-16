@@ -93,6 +93,7 @@ func ConfigInfo() string {
                 IP:       cfg.IP,
                 Index:    cfg.Index,
                 Gateway:  cfg.Gateway,
+                Password: cfg.Password,
                 Joined:   cfg.Token != "" && cfg.NodeID != "",
         })
 }

@@ -144,6 +144,9 @@ public class SettingsActivity extends Activity {
             if (info.has("gateway")) {
                 etGateway.setText(info.optString("gateway", ""));
             }
+            if (info.has("password")) {
+                etPassword.setText(info.optString("password", ""));
+            }
         } catch (Throwable ignored) {
             // Конфига ещё нет — это нормальное состояние при первом запуске.
         }
