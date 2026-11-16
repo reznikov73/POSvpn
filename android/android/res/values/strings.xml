@@ -24,6 +24,8 @@
     <string name="password_label">Пароль сети (от 8 символов)</string>
     <string name="node_label">Имя этого устройства в сети</string>
     <string name="node_hint">phone</string>
+    <string name="gateway_label">Шлюз в интернет (IP в сети, пусто — не использовать)</string>
+    <string name="gateway_hint">10.77.0.1</string>
     <string name="btn_create">Создать сеть</string>
     <string name="btn_join">Войти в сеть</string>
     <string name="btn_save">Сохранить сервер</string>
@@ -37,7 +39,7 @@
     <string name="notification_channel">Туннель POSvpn</string>
     <string name="notification_title">POSvpn активен</string>
     <string name="notification_text">Виртуальная локальная сеть поднята</string>
-    <string name="about_text">POSvpn для Android 0.9.3\n\nВиртуальная локальная сеть через ваш сервер-координатор. Совместим с настольным POSvpn 0.9.x: те же сети, адреса 10.77.x.y и шифрование ChaCha20-Poly1305.\n\nПроект: github.com/reznikov73/POSvpn</string>
+    <string name="about_text">POSvpn для Android 0.9.4\n\nВиртуальная локальная сеть через ваш сервер-координатор. Совместим с настольным POSvpn 0.9.x: те же сети, адреса 10.77.x.y и шифрование ChaCha20-Poly1305.\n\nПроект: github.com/reznikov73/POSvpn</string>
     <string name="leave_confirm">Выйти из сети и стереть настройки этого устройства в ней?</string>
     <string name="yes">Да</string>
     <string name="no">Нет</string>
@@ -53,4 +55,5 @@
     <string name="route_all_hint">Направить интернет телефона в сеть POSvpn (нужен шлюз с NAT)</string>
     <string name="route_all_on_toast">Применится при следующем подключении</string>
     <string name="route_all_off_toast">Применится при следующем подключении</string>
+    <string name="gateway_saved">Шлюз сохранён</string>
 </resources>

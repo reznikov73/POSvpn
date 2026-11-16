@@ -57,17 +57,22 @@ Android-устройство становится полноценным уча�
 Android NDK r27.
 
 ```bash
-git clone https://github.com/reznikov73/POSvpn.git
-cd POSvpn/android
+git clone --recursive https://github.com/reznikov73/POSvpn-android.git
+cd POSvpn-android
 
 SDK=$HOME/android-sdk JDK=$HOME/jdk ./build-apk.sh
-# → android/out/POSvpn-0.9.3.apk
+# → android/out/POSvpn-0.9.1.apk
 ```
 
-Android-клиент живёт в подпапке `android/` основного репозитория
-[POSvpn](https://github.com/reznikov73/POSvpn): движок (`engine/` в корне)
-подключается через replace-директиву в `go/go.mod`. Обновление движка —
-обычный `git pull` корня репозитория.
+Репозиторий ссылается на основной [POSvpn](https://github.com/reznikov73/POSvpn)
+как на git-submodule `POSvpn/`: движок (`engine/`) не копируется, а
+подключается целиком (см. `go/go.mod`, replace-директива). Обновление движка:
+
+```bash
+cd POSvpn && git checkout main && git pull && cd ..
+cd go && go mod tidy && cd ..
+./build-apk.sh
+```
 
 Сборка состоит из двух шагов, каждый можно запускать отдельно:
 
@@ -94,10 +99,8 @@ android/            Приложение
   java/ru/posvpn/client/  MainActivity, SettingsActivity, PosVpnService
   res/               разметка, тема, иконки
   build.sh           сборка APK без Gradle
+POSvpn/             git-submodule: основной репозиторий (engine)
 ```
-
-Движок лежит в `engine/` корня основного репозитория,
-Android-клиент целиком — в `android/`.
 
 ## Как устроен мост Go ↔ Android
 
@@ -187,7 +190,7 @@ sudo iptables -A FORWARD -i eth0 -o <tun-адаптер POSvpn> \
 | Координатор API | `/api/v1` |
 
 До выпуска 1.0 формат кадра и API основного проекта могут меняться —
-синхронизируйте подпапку `android/` с актуальным коммитом ветки `main`.
+закрепляйте submodule на проверенном коммите.
 
 ## Разработка
 

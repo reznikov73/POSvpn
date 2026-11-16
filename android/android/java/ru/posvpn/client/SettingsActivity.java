@@ -33,6 +33,7 @@ public class SettingsActivity extends Activity {
     private EditText etNetwork;
     private EditText etPassword;
     private EditText etNode;
+    private EditText etGateway;
     private Button btnCreate;
     private Button btnJoin;
     private Button btnSaveServer;
@@ -57,6 +58,7 @@ public class SettingsActivity extends Activity {
             etNetwork = findViewById(R.id.etNetwork);
             etPassword = findViewById(R.id.etPassword);
             etNode = findViewById(R.id.etNode);
+            etGateway = findViewById(R.id.etGateway);
             btnCreate = findViewById(R.id.btnCreate);
             btnJoin = findViewById(R.id.btnJoin);
             btnSaveServer = findViewById(R.id.btnSaveServer);
@@ -139,6 +141,9 @@ public class SettingsActivity extends Activity {
             if (info.has("node")) {
                 etNode.setText(info.optString("node", ""));
             }
+            if (info.has("gateway")) {
+                etGateway.setText(info.optString("gateway", ""));
+            }
         } catch (Throwable ignored) {
             // Конфига ещё нет — это нормальное состояние при первом запуске.
         }
@@ -168,6 +173,7 @@ public class SettingsActivity extends Activity {
         final String network = etNetwork.getText().toString().trim();
         final String password = etPassword.getText().toString();
         final String node = etNode.getText().toString().trim();
+        final String gateway = etGateway.getText().toString().trim();
 
         if (TextUtils.isEmpty(network)) {
             etNetwork.setError(getString(R.string.network_label));
@@ -182,6 +188,8 @@ public class SettingsActivity extends Activity {
         new Thread(() -> {
             final Exception[] error = {null};
             try {
+                // Шлюз сохраняем до входа: он прочитается при старте туннеля.
+                Mobile.setGateway(gateway);
                 if (create) {
                     Mobile.create(server, hub, pin, network, password, node);
                 } else {
@@ -209,10 +217,12 @@ public class SettingsActivity extends Activity {
         final String server = etServer.getText().toString().trim();
         final String hub = etHub.getText().toString().trim();
         final String pin = etPin.getText().toString().trim();
+        final String gateway = etGateway.getText().toString().trim();
         new Thread(() -> {
             final Exception[] error = {null};
             try {
                 Mobile.setServer(server, hub, pin);
+                Mobile.setGateway(gateway);
             } catch (Exception e) {
                 error[0] = e;
             }

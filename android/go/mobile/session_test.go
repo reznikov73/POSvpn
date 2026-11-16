@@ -215,6 +215,143 @@ func TestSessionThroughHub(t *testing.T) {
         cancel()
 }
 
+// TestGatewayForwarding — пакеты с адресатом вне подсети пересылаются
+// пиру-шлюзу (сценарий «интернет через ПК с NAT»): A с GatewayIP=B
+// отправляет пакет на 8.8.8.8, кадр приходит B, payload не изменён.
+func TestGatewayForwarding(t *testing.T) {
+        pairA, _ := engine.GenerateKeyPair()
+        pairB, _ := engine.GenerateKeyPair()
+
+        const networkID = "n_gw"
+        tokens := map[string]tunnel.Identity{
+                "token-a": {NodeID: "u_a", NetworkID: networkID, Index: 1},
+                "token-b": {NodeID: "u_b", NetworkID: networkID, Index: 2},
+        }
+
+        cert, err := tunnel.SelfSignedCertificate()
+        if err != nil {
+                t.Fatalf("сертификат: %v", err)
+        }
+        hub, err := tunnel.Listen(tunnel.HubConfig{
+                Addr:      "127.0.0.1:0",
+                TLSConfig: tunnel.ServerTLSConfig(cert),
+                Auth: func(token string) (tunnel.Identity, error) {
+                        id, ok := tokens[token]
+                        if !ok {
+                                return tunnel.Identity{}, os.ErrPermission
+                        }
+                        return id, nil
+                },
+        })
+        if err != nil {
+                t.Fatalf("хаб: %v", err)
+        }
+        defer hub.Close()
+
+        netmapA := engine.NetMap{
+                NetworkID: networkID, NetworkName: "gw", Subnet: "10.77.1.0/24", Version: 1,
+                Self:  engine.Peer{Index: 1, IP: "10.77.1.1", PublicKey: pairA.Public, Name: "A"},
+                Peers: []engine.Peer{{Index: 2, IP: "10.77.1.2", PublicKey: pairB.Public, Name: "B"}},
+        }
+        netmapB := engine.NetMap{
+                NetworkID: networkID, NetworkName: "gw", Subnet: "10.77.1.0/24", Version: 1,
+                Self:  engine.Peer{Index: 2, IP: "10.77.1.2", PublicKey: pairB.Public, Name: "B"},
+                Peers: []engine.Peer{{Index: 1, IP: "10.77.1.1", PublicKey: pairA.Public, Name: "A"}},
+        }
+
+        privA, _ := base64.StdEncoding.DecodeString(pairA.Private)
+        privB, _ := base64.StdEncoding.DecodeString(pairB.Private)
+
+        gw, err := netip.ParseAddr("10.77.1.2")
+        if err != nil {
+                t.Fatal(err)
+        }
+        optA := tunnelOptions{
+                Server: "http://127.0.0.1:1", HubAddr: hub.Addr(), Token: "token-a",
+                NetworkID: networkID, Subnet: mustPrefix(t, "10.77.1.0/24"),
+                SelfIndex: 1, SelfIP: "10.77.1.1", PrivateKey: privA, MTU: 1100,
+                NetMap: netmapA, GatewayIP: gw,
+        }
+        optB := optA
+        optB.Token = "token-b"
+        optB.SelfIndex = 2
+        optB.SelfIP = "10.77.1.2"
+        optB.PrivateKey = privB
+        optB.NetMap = netmapB
+        optB.GatewayIP = netip.Addr{} // B сам никуда не пересылает
+
+        devA, devB := newFakeDevice(), newFakeDevice()
+        peersA, peersB := newPeerSet(), newPeerSet()
+        if err := peersA.rebuild(netmapA, privA); err != nil {
+                t.Fatalf("карта A: %v", err)
+        }
+        if err := peersB.rebuild(netmapB, privB); err != nil {
+                t.Fatalf("карта B: %v", err)
+        }
+
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+
+        upA, upB := make(chan bool, 16), make(chan bool, 16)
+        stateA := func(connected bool, _ error) { upA <- connected }
+        stateB := func(connected bool, _ error) { upB <- connected }
+
+        errCh := make(chan error, 2)
+        go func() { errCh <- runSession(ctx, optA, devA, peersA, stateA) }()
+        go func() { errCh <- runSession(ctx, optB, devB, peersB, stateB) }()
+
+        waitUp := func(ch chan bool, name string) {
+                t.Helper()
+                for {
+                        select {
+                        case v := <-ch:
+                                if v {
+                                        return
+                                }
+                        case err := <-errCh:
+                                t.Fatalf("сессия %s упала: %v", name, err)
+                        case <-time.After(5 * time.Second):
+                                t.Fatalf("сессия %s не подключилась за 5 секунд", name)
+                        }
+                }
+        }
+        waitUp(upA, "A")
+        waitUp(upB, "B")
+
+        // Пакет из интернета: src — сам узел, dst — внешний адрес.
+        outside := ipv4([4]byte{10, 77, 1, 1}, [4]byte{8, 8, 8, 8}, 12)
+        for i := range outside[20:] {
+                outside[20+i] = byte(0xA0 + i)
+        }
+        devA.in <- outside
+
+        select {
+        case got := <-devB.out:
+                if len(got) != len(outside) {
+                        t.Fatalf("длина пакета через шлюз: %d, ждали %d", len(got), len(outside))
+                }
+                for i := range outside {
+                        if got[i] != outside[i] {
+                                t.Fatalf("байт %d изменён: %d, ждали %d", i, got[i], outside[i])
+                        }
+                }
+        case <-time.After(5 * time.Second):
+                t.Fatal("внешний пакет не переслан шлюзу B за 5 секунд")
+        }
+
+        // Без шлюза (B) внешние пакеты отбрасываются: убеждаемся, что
+        // канал B пуст — иначе тест бы завис на следующем чтении.
+        devB.in <- ipv4([4]byte{10, 77, 1, 2}, [4]byte{1, 1, 1, 1}, 8)
+        select {
+        case got := <-devA.out:
+                t.Fatalf("пакет 1.1.1.1 не должен был дойти до A, а дошёл (%d байт)", len(got))
+        case <-time.After(300 * time.Millisecond):
+                // Так и должно быть: у B нет шлюза, пакет отброшен.
+        }
+
+        cancel()
+}
+
 // TestFdDevice — чтение и запись через реальный файловый дескриптор,
 // как это будет с TUN от VpnService. Используются сырые дескрипторы
 // syscall.Pipe: их не трогает поллер Go-рантайма.
@@ -369,15 +506,15 @@ func mustPrefix(t *testing.T, s string) netip.Prefix {
 type sp struct{ a, b int }
 
 func (s sp) close() {
-	_ = syscall.Close(s.a)
-	_ = syscall.Close(s.b)
+        _ = syscall.Close(s.a)
+        _ = syscall.Close(s.b)
 }
 
 // socketpair — два двунаправленных дескриптора UNIX-сокета.
 func socketpair() (sp, error) {
-	fd, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
-	if err != nil {
-		return sp{}, err
-	}
-	return sp{a: fd[0], b: fd[1]}, nil
+        fd, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+        if err != nil {
+                return sp{}, err
+        }
+        return sp{a: fd[0], b: fd[1]}, nil
 }

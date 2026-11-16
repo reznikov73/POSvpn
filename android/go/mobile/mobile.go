@@ -77,7 +77,7 @@ func HasConfig() bool {
 
 // ConfigInfo возвращает краткую сводку настроек как JSON:
 // {"server":"...","hub":"...","hub_pin":"...","network":"...","node":"...",
-//  "ip":"...","index":N,"joined":true}
+//  "ip":"...","index":N,"gateway":"...","joined":true}
 // Сервису VPN отсюда нужен ip — для Builder.addAddress.
 func ConfigInfo() string {
         cfg, err := loadConfig()
@@ -92,6 +92,7 @@ func ConfigInfo() string {
                 Node:     cfg.Node,
                 IP:       cfg.IP,
                 Index:    cfg.Index,
+                Gateway:  cfg.Gateway,
                 Joined:   cfg.Token != "" && cfg.NodeID != "",
         })
 }
@@ -111,6 +112,14 @@ func SetServer(server, hub, hubPin string) error {
                 cfg.HubPin = hubPin
         }
         return saveConfig(cfg)
+}
+
+// SetGateway задаёт шлюз по умолчанию: IP участника сети, через который
+// этот узел выходит в интернет (вне подсети POSvpn). Пустая строка —
+// отключить выход в интернет через сеть. Применяется при следующем
+// подключении туннеля.
+func SetGateway(gateway string) error {
+        return setGateway(gateway)
 }
 
 // Create создаёт новую сеть: этот узел становится её администратором.
