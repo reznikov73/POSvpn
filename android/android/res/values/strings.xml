@@ -39,7 +39,7 @@
     <string name="notification_channel">Туннель POSvpn</string>
     <string name="notification_title">POSvpn активен</string>
     <string name="notification_text">Виртуальная локальная сеть поднята</string>
-    <string name="about_text">POSvpn для Android 0.9.4\n\nВиртуальная локальная сеть через ваш сервер-координатор. Совместим с настольным POSvpn 0.9.x: те же сети, адреса 10.77.x.y и шифрование ChaCha20-Poly1305.\n\nПроект: github.com/reznikov73/POSvpn</string>
+    <string name="about_text">POSvpn для Android 0.9.5\n\nВиртуальная локальная сеть через ваш сервер-координатор. Совместим с настольным POSvpn 0.9.x: те же сети, адреса 10.77.x.y и шифрование ChaCha20-Poly1305.\n\nПроект: github.com/reznikov73/POSvpn</string>
     <string name="leave_confirm">Выйти из сети и стереть настройки этого устройства в ней?</string>
     <string name="yes">Да</string>
     <string name="no">Нет</string>

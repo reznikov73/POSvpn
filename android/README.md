@@ -5,7 +5,7 @@
 Android-устройство становится полноценным участником вашей виртуальной
 локальной сети.
 
-`0.9.1` · Android 8.0+ (API 26) · arm64, armv7, x86_64
+`0.9.5` · Android 8.0+ (API 26) · arm64, armv7, x86_64
 
 ---
 
@@ -57,21 +57,20 @@ Android-устройство становится полноценным уча�
 Android NDK r27.
 
 ```bash
-git clone --recursive https://github.com/reznikov73/POSvpn-android.git
-cd POSvpn-android
+git clone --recursive https://github.com/reznikov73/POSvpn.git
+cd POSvpn
 
-SDK=$HOME/android-sdk JDK=$HOME/jdk ./build-apk.sh
-# → android/out/POSvpn-0.9.1.apk
+SDK=$HOME/android-sdk JDK=$HOME/jdk ./android/build-apk.sh
+# → android/android/out/POSvpn-0.9.5.apk
 ```
 
-Репозиторий ссылается на основной [POSvpn](https://github.com/reznikov73/POSvpn)
-как на git-submodule `POSvpn/`: движок (`engine/`) не копируется, а
-подключается целиком (см. `go/go.mod`, replace-директива). Обновление движка:
+Движок основного проекта подключается по пути `../../engine`
+(`replace posvpn-engine => ../../engine` в `go/go.mod`), поэтому `android/`
+собирается только из этой копии репозитория. Обновление движка:
 
 ```bash
-cd POSvpn && git checkout main && git pull && cd ..
-cd go && go mod tidy && cd ..
-./build-apk.sh
+cd android/go && go mod tidy && cd ../..
+./android/build-apk.sh
 ```
 
 Сборка состоит из двух шагов, каждый можно запускать отдельно:
@@ -99,7 +98,7 @@ android/            Приложение
   java/ru/posvpn/client/  MainActivity, SettingsActivity, PosVpnService
   res/               разметка, тема, иконки
   build.sh           сборка APK без Gradle
-POSvpn/             git-submodule: основной репозиторий (engine)
+engine/            общий движок (модуль posvpn-engine, подключается из ../../engine)
 ```
 
 ## Как устроен мост Go ↔ Android
@@ -115,7 +114,7 @@ POSvpn/             git-submodule: основной репозиторий (engi
 
 ## Отличия от настольного клиента
 
-- Прокси SOCKS5 на узле не поднят (план);
+- Прокси SOCKS5 и режим «весь трафик» — разные механизмы: прокси принимает TCP-соединения приложений, полный туннель пересылает IP-пакеты шлюзу;
 - служба живёт в foreground-режиме с уведомлением — требование Android;
 - возобновление после сна/смены сети обрабатывает `START_STICKY` и
   переподключение туннеля 1–30 с из движка.
@@ -162,11 +161,21 @@ sudo iptables -A FORWARD -i eth0 -o <tun-адаптер POSvpn> \
 
 ### Шлюз на Windows-ПК
 
-1. Панель управления → Сеть и Интернет → Сетевые подключения.
-2. Свойства адаптера с интернетом (Ethernet/Wi-Fi) → вкладка Доступ.
-3. «Разрешить другим пользователям сети использовать подключение
-   к Интернету» → выбрать адаптер Wintun (POSvpn).
-4. Windows сама поднимет NAT и раздачу адресов для TUN-подсети.
+«Общий доступ к подключению к Интернету» (ICS) для этой схемы не подходит:
+он принудительно назначает внутреннему интерфейсу `192.168.137.1` и поднимает
+на нём DHCP, а адаптеру POSvpn нужен адрес `10.77.x.1`. Нужен WinNat, он
+требует Hyper-V, то есть Windows Pro/Enterprise (на Home недоступен). В
+PowerShell от администратора:
+
+```powershell
+Set-NetIPInterface -InterfaceAlias "POSvpn" -AddressFamily IPv4 -Forwarding Enabled
+Set-NetIPInterface -InterfaceAlias "Ethernet" -AddressFamily IPv4 -Forwarding Enabled
+New-NetNat -Name POSvpn -InternalIPInterfaceAddressPrefix 10.77.0.0/16
+Get-NetNat        # проверка: NAT создан
+Get-NetNatSession # появляются сессии, когда телефон ходит в интернет
+```
+
+Имя адаптера с интернетом уточнить: `Get-NetAdapter`.
 
 ### Проверка
 
@@ -190,7 +199,7 @@ sudo iptables -A FORWARD -i eth0 -o <tun-адаптер POSvpn> \
 | Координатор API | `/api/v1` |
 
 До выпуска 1.0 формат кадра и API основного проекта могут меняться —
-закрепляйте submodule на проверенном коммите.
+закрепляйте версию движка на проверенном коммите.
 
 ## Разработка
 
