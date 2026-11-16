@@ -235,7 +235,7 @@
             fill="#7fd8ff" font-family="Segoe UI, sans-serif">S</text>
     </svg>
     <div class="brand">POS<span>VPN</span></div>
-    <div class="tag">сервер</div>
+    <div class="tag" id="verTag">сервер</div>
   </header>
 
   <main>
@@ -353,6 +353,7 @@
 
   function render(s) {
     var running = !!s.running;
+    setText('verTag', 'сервер · ' + (s.version || 'dev') + ' (сборка ' + (s.build || '0') + ')');
     var power = $('power');
     power.classList.toggle('on', running);
     setText('powerWord', running ? 'ON' : 'OFF');

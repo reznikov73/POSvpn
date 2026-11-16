@@ -160,7 +160,7 @@ public class MainActivity extends Activity {
             } else {
                 new AlertDialog.Builder(this)
                         .setTitle(R.string.app_name)
-                        .setMessage(R.string.about_text)
+                        .setMessage(aboutText())
                         .setPositiveButton(R.string.yes, null)
                         .show();
             }
@@ -169,6 +169,17 @@ public class MainActivity extends Activity {
         menu.show();
     }
 
+    /** Текст «О программе»: версия и номер сборки берутся из установленного пакета. */
+    private String aboutText() {
+        try {
+            android.content.pm.PackageInfo info = getPackageManager()
+                    .getPackageInfo(getPackageName(), 0);
+            return getString(R.string.about_text)
+                    + "\n\nВерсия " + info.versionName + ", сборка " + info.versionCode;
+        } catch (Exception e) {
+            return getString(R.string.about_text);
+        }
+    }
     private void confirmLeave() {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.leave_network)

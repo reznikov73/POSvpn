@@ -590,6 +590,7 @@
     <p>Виртуальная локальная сеть через интернет. Вход по имени сети и паролю,
        без аккаунта и настройки роутера.</p>
     <p class="mono">Трафик: X25519 + ChaCha20-Poly1305<br>Транспорт: QUIC, свой кадр<br>Адресация: 10.77.0.0/16</p>
+    <p class="mono" id="aboutVer"></p>
     <p class="mono" id="aboutState"></p>
     <p class="mono" id="aboutLog"></p>
     <div class="row">
@@ -751,6 +752,7 @@
       peersBox.innerHTML = html;
     }
 
+    setText('aboutVer', 'Версия ' + (s.version || 'dev') + ' · сборка ' + (s.build || '0'));
     setText('aboutState', 'Узлов в сети: ' + (peers.length + (s.configured ? 1 : 0)) +
       ' · индекс: ' + (s.self_index || '—') + ' · ' + (s.service ? 'служба' : 'локальный режим'));
     setText('aboutLog', s.log_path ? 'Журнал: ' + s.log_path : '');

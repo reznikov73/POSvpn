@@ -15,6 +15,14 @@ if (-not (Test-Path $wintun)) {
     Write-Host 'wintun.dll не найден: .\tools\fetch-wintun.ps1 (или -From <путь>)' -ForegroundColor Yellow
 }
 
+# Версия и номер сборки попадают в бинарники через ldflags: окно «О программе»
+# показывает их, не читая файлов рядом с exe.
+$version = (Get-Content (Join-Path $root 'installer\version.txt') -Raw).Trim()
+$build = ''
+try { $build = (git -C $root rev-list --count HEAD 2>$null | Out-String).Trim() } catch { }
+if (-not $build) { $build = '0' }
+$ldflags = "-X main.version=$version -X main.build=$build"
+
 $targets = @(
     @{ Name = 'posvpn-server'; Path = './posvpn-server' },
     @{ Name = 'posvpn-client'; Path = './posvpn-client' }
@@ -23,7 +31,7 @@ $targets = @(
 $failed = @()
 foreach ($t in $targets) {
     Write-Host "Сборка $($t.Name)… " -NoNewline
-    $output = go build -o "out\$($t.Name).exe" $t.Path 2>&1
+    $output = go build -ldflags $ldflags -o "out\$($t.Name).exe" $t.Path 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ОШИБКА" -ForegroundColor Red
         $output | ForEach-Object { Write-Host $_ }

@@ -35,6 +35,14 @@ var configOverride string
 
 const defaultServer = "http://127.0.0.1:8787"
 
+// version и build подставляет сборка:
+//
+//	go build -ldflags "-X main.version=0.9.3 -X main.build=1234"
+var (
+	version = "dev"
+	build   = "0"
+)
+
 // config — локальное состояние клиента. Приватный ключ узла никогда не уходит
 // на сервер: туда отправляется только публичная половина.
 type config struct {
@@ -128,6 +136,9 @@ func main() {
 		err = runDown(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
+		return
+	case "version", "-version":
+		fmt.Printf("POSvpn Клиент %s (сборка %s)\n", version, build)
 		return
 	default:
 		err = fmt.Errorf("неизвестная команда %q", os.Args[1])

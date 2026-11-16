@@ -39,6 +39,8 @@ type settingsRequest struct {
 
 type srvState struct {
 	Running     bool          `json:"running"`
+	Version     string        `json:"version"`
+	Build       string        `json:"build"`
 	Listen      string        `json:"listen"`
 	Scheme      string        `json:"scheme"`
 	Hub         string        `json:"hub"`
@@ -185,6 +187,8 @@ func (g *serverGUI) updateTray(running bool) {
 func (g *serverGUI) State() (string, error) {
 	state := srvState{
 		Running:     g.app.Running(),
+		Version:     version,
+		Build:       build,
 		Listen:      g.app.ListenAddr(),
 		Scheme:      "http",
 		Hub:         g.app.HubAddr(),

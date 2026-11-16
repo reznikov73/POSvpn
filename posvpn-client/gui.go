@@ -63,6 +63,8 @@ type guiState struct {
 	Elevated         bool      `json:"elevated"`
 	Service          bool      `json:"service"`
 	LogPath          string    `json:"log_path"`
+	Version          string    `json:"version"`
+	Build            string    `json:"build"`
 	Peers            []guiPeer `json:"peers"`
 
 	// Прокси: разрешён ли выход в интернет через этот узел и по какому адресу.
@@ -342,6 +344,8 @@ func (a *guiApp) collectState() guiState {
 			Elevated:         isElevated(),
 			ServiceInstalled: true,
 			ServiceRunning:   running,
+			Version:          version,
+			Build:            build,
 			Peers:            []guiPeer{},
 		}
 		if !running {
@@ -354,6 +358,8 @@ func (a *guiApp) collectState() guiState {
 		HasWintun: hasWintun(),
 		Elevated:  isElevated(),
 		LogPath:   logPath,
+		Version:   version,
+		Build:     build,
 		Peers:     []guiPeer{},
 	}
 	if cfg != nil {

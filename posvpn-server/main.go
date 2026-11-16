@@ -26,6 +26,16 @@ import (
 	"posvpn-engine/tunnel"
 )
 
+// version и build подставляет сборка:
+//
+//	go build -ldflags "-X main.version=0.9.3 -X main.build=1234"
+//
+// Без флагов остаются значения для отладочной сборки.
+var (
+	version = "dev"
+	build   = "0"
+)
+
 // serverApp — процесс сервера. Его можно останавливать и снова запускать
 // из окна, не закрывая программу.
 type serverApp struct {
@@ -116,7 +126,7 @@ func (a *serverApp) Start() error {
 		}
 	}()
 
-	log.Printf("сервер запущен (control %s, хаб %s)", a.listen, a.hubAddr)
+	log.Printf("POSvpn Server %s (сборка %s): control %s, хаб %s", version, build, a.listen, a.hubAddr)
 	if localOnlyListen(a.listen) {
 		log.Printf("ВНИМАНИЕ: %s слушает только этот компьютер — удалённые клиенты не подключатся", a.listen)
 	}
@@ -294,7 +304,13 @@ func main() {
 	consoleFlag := flag.Bool("console", false, "работать без окна: служба, VPS, отладка")
 	minimized := flag.Bool("minimized", false, "запустить свёрнутым в трей")
 	tlsSelf := flag.Bool("tls", saved.TLS, "HTTPS для control-API на сертификате хаба (клиентам нужен -pin)")
+	versionFlag := flag.Bool("version", false, "показать версию и сборку, затем выйти")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("POSvpn Server %s (сборка %s)\n", version, build)
+		return
+	}
 
 	resolvedStore := resolveStorePath(*storePath)
 	if portable && *storePath == storeDefault {

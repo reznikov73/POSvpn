@@ -106,6 +106,8 @@ func (a *serviceApp) snapshot() guiState {
 		Elevated:  true,
 		Service:   true,
 		LogPath:   logPath,
+		Version:   version,
+		Build:     build,
 		Peers:     []guiPeer{},
 	}
 	if cfg != nil {
